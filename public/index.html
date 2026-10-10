@@ -18,6 +18,15 @@
   header .meta { color:var(--dim); font-size:13px; }
   header a.gh { color:var(--dim); font-size:13px; text-decoration:none; border:1px solid var(--line); border-radius:6px; padding:3px 9px; white-space:nowrap; }
   header a.gh:hover { color:var(--fg); border-color:var(--acc); }
+  header a.gh svg { vertical-align:-2px; margin-right:3px; }
+  ol.modes { margin:0 0 12px; padding-left:22px; }
+  ol.modes li { margin:4px 0; }
+  details.settings summary { cursor:pointer; list-style:none; }
+  details.settings summary::-webkit-details-marker { display:none; }
+  details.settings summary h2 { display:inline; margin:0; }
+  details.settings summary::before { content:"▸"; color:var(--dim); margin-right:8px; display:inline-block; transition:transform .15s; }
+  details.settings[open] summary::before { transform:rotate(90deg); }
+  details.settings[open] summary { margin-bottom:8px; }
   main { display:grid; grid-template-columns: 1fr 380px; gap:18px; padding:18px 20px; max-width:1300px; margin:0 auto; }
   @media (max-width: 900px) { main { grid-template-columns:1fr; } }
   .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px; }
@@ -111,10 +120,9 @@
 <body>
 <header>
   <h1>Musical Ear Trainer</h1>
-  <span class="muted">hooks → intervals → songs</span>
   <div class="spacer"></div>
   <div class="meta" id="meta">loading clips…</div>
-  <a class="gh" href="https://github.com/mitchellgordon95/musical-ear-trainer" target="_blank" rel="noopener" title="Source code (MIT)">Source on GitHub</a>
+  <a class="gh" href="https://github.com/mitchellgordon95/musical-ear-trainer" target="_blank" rel="noopener" title="Source code (MIT)"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="currentColor"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg> Source on GitHub</a>
 </header>
 
 <main>
@@ -123,22 +131,18 @@
     <div id="tab-hooks">
       <div class="panel">
         <div id="hooks-idle">
-          <p class="muted">Three exercises on hooks you know by heart, all against a tonal centre. <strong>1 · Find the tonic:</strong> the hook plays; find home on the little keyboard. <strong>2 · Name the degrees:</strong> the song is shown; name every note of the hook as a scale degree over the tonic drone, staying on a note until you get it. <strong>3 · Name the song:</strong> the degrees are shown and the title is hidden; hear it in your head and say which song it is. The real clip plays after each answer. No singing required.</p>
+          <p class="muted" style="margin-top:0">Three exercises on hooks you know by heart, all against a tonal centre. The real clip plays after each answer. No singing required.</p>
+          <ol class="modes muted">
+            <li><strong>Find the tonic:</strong> the hook plays; find home on the little keyboard.</li>
+            <li><strong>Name the degrees:</strong> the song is shown; name every note of the hook as a scale degree over the tonic drone, staying on a note until you get it.</li>
+            <li><strong>Name the song:</strong> the degrees are shown and the title is hidden; hear it in your head and say which song it is.</li>
+          </ol>
           <div class="row">
             <label class="small">Mode</label>
             <select id="hook-mode"><option value="tonic">1 · find the tonic</option><option value="interval">2 · name the degrees</option><option value="song">3 · name the song</option><option value="mixed">mixed</option></select>
-            <label class="small">Phrases per section</label>
-            <select id="hook-phrases"><option value="1">first only</option><option value="2">first 2</option><option value="3">first 3</option><option value="99">all</option></select>
-            <label class="small">Choices</label>
-            <select id="hook-choices"><option>4</option><option>6</option><option>8</option><option value="all">all songs</option></select>
             <button class="btn primary" id="hooks-start">Start</button>
             <span class="muted" id="hooks-pool-info"></span>
           </div>
-          <div class="row"><label class="chip" id="hook-auto-tone-wrap"><input type="checkbox" id="hook-auto-tone"> play the starting tone on each hook</label></div>
-          <div class="row" style="margin-top:10px"><label class="small">Sections in the pool</label></div>
-          <div class="chips" id="hook-section-chips"></div>
-          <h2 style="margin-top:16px">Anchors</h2>
-          <table class="summary" id="hooks-coverage"></table>
           <h2 style="margin-top:16px">Songs</h2>
           <div class="row" style="justify-content:space-between">
             <span class="muted">Tick the songs to draw hooks from. Known or not, your call. Per song: hooks in the pool and their first moves.</span>
@@ -155,9 +159,10 @@
           <div id="hq-prompt" class="hookq"></div>
           <div class="ivseq" id="hq-ivs"></div>
           <div class="row">
-            <button class="btn" id="hq-tone" title="The question's note on a synth over the tonic: a reference, not a hint">♪ Tone <kbd>t</kbd></button>
-            <button class="tiny" id="hq-drone" title="Tonic drone on/off"><kbd>d</kbd> drone</button>
             <button class="btn" id="hq-play">▶ Play hook</button>
+            <button class="btn" id="hq-tone" title="Plays the note you're naming (the ?) on a synth: its pitch, not its degree">♪ This note <kbd>t</kbd></button>
+            <button class="btn" id="hq-prog" title="A chord progression in the hook's key, ending on home, to set the tonal centre">♫ <span id="hq-prog-name">I–V–vi–IV–I</span> <kbd>c</kbd></button>
+            <button class="tiny" id="hq-drone" title="Tonic drone on/off"><kbd>d</kbd> drone</button>
             <span class="status" id="hq-play-status"></span>
           </div>
           <div class="answers" id="hq-answers"></div>
@@ -192,14 +197,20 @@
     <div class="timeline" id="timeline"></div>
     <div class="lyrics" id="lyrics"></div>
 
-    <div class="panel" style="margin-top:14px">
-      <h2>Settings</h2>
+    <details class="panel settings" id="settings" style="margin-top:14px">
+      <summary><h2>Settings</h2></summary>
+      <div class="row">
+        <label class="small">Name-the-song choices</label>
+        <select id="hook-choices"><option>4</option><option>6</option><option>8</option><option value="all">all songs</option></select>
+      </div>
+      <div class="row"><label class="small">Sections in the pool</label></div>
+      <div class="chips" id="hook-section-chips"></div>
       <div class="row">
         <label class="small">Visualizer</label>
         <select id="viz"><option value="pop">pop on each note</option><option value="slider">smooth slider</option><option value="both">both</option></select>
       </div>
       <div class="row">
-        <label class="small">Synth volume (keys, tone, drone) <span id="synth-vol-val"></span></label>
+        <label class="small">Synth volume (keys, note, chords, drone) <span id="synth-vol-val"></span></label>
         <input type="range" id="synth-vol" min="0" max="1.5" step="0.05">
       </div>
       <div class="row">
@@ -209,14 +220,14 @@
       <div class="row">
         <label class="small">Labels</label>
         <select id="labels"><option value="degrees">scale degrees (1 ↓7 ↑2)</option><option value="intervals">intervals (M2↓ m3↑)</option></select>
-        <label class="chip" id="drone-wrap"><input type="checkbox" id="drone"> tonic drone</label>
       </div>
       <div class="row">
+        <label class="chip" id="drone-wrap"><input type="checkbox" id="drone"> start the drone on each name-the-degrees hook</label>
         <label class="chip" id="strip-wrap"><input type="checkbox" id="strip"> note strip (rhythm before, pitch after)</label>
         <label class="chip" id="show-lyrics-wrap"><input type="checkbox" id="show-lyrics"> lyrics on reveal</label>
         <label class="chip" id="skip-suspect-wrap"><input type="checkbox" id="skip-suspect"> skip suspect-timing sections</label>
       </div>
-    </div>
+    </details>
   </aside>
 </main>
 
@@ -227,7 +238,7 @@ let DATA = null, SONGS = [];
 const SONGS_OFF_BY_DEFAULT = ["Kenshi Yonezu – KICK BACK", "Kenshi Yonezu – Lemon", "YOASOBI – Idol"];   // anime-list songs, unticked unless you tick them
 const S = loadSettings();
 function loadSettings() {
-  const d = { padBefore: 0.15, padAfter: 0.25, viz: "pop", showLyrics: true, skipSuspect: true, songs: null, songsSeen: [], hookMode: "song", hookChoices: "4", hookSections: ["Chorus"], hookAutoTone: true, labels: "degrees", drone: true, strip: true, tonicChords: 4, synthVol: 1, keyOctave: 0, phrases: 1 };
+  const d = { padBefore: 0.15, padAfter: 0.25, viz: "pop", showLyrics: true, skipSuspect: true, songs: null, songsSeen: [], hookMode: "song", hookChoices: "4", hookSections: ["Chorus"], labels: "degrees", drone: true, strip: true, tonicChords: 4, synthVol: 1, keyOctave: 0, settingsOpen: false };
   try { return Object.assign(d, JSON.parse(localStorage.getItem("it-settings") || "{}")); } catch { return d; }
 }
 function saveSettings() { try { localStorage.setItem("it-settings", JSON.stringify(S)); } catch {} }
@@ -257,9 +268,10 @@ fetch("clips.json", { cache: "no-cache" }).then(r => r.json()).then(d => {
 });
 
 function buildSettings() {
+  $("#settings").open = S.settingsOpen; $("#settings").ontoggle = e => { S.settingsOpen = e.target.open; saveSettings(); };
   $("#labels").value = S.labels; $("#labels").onchange = e => { S.labels = e.target.value; saveSettings(); refreshHooks(); if (HQ) renderSeq(); };
   $("#drone").checked = S.drone; $("#drone-wrap").classList.toggle("on", S.drone);
-  $("#drone").onchange = e => { S.drone = e.target.checked; $("#drone-wrap").classList.toggle("on", S.drone); saveSettings(); if (HQ && !HQ.revealed) (S.drone ? droneStart(HQ.hook) : droneStop()); };
+  $("#drone").onchange = e => { S.drone = e.target.checked; $("#drone-wrap").classList.toggle("on", S.drone); saveSettings(); if (HQ && !HQ.revealed && hasDrone()) (S.drone ? droneStart(HQ.hook) : droneStop()); };
   $("#viz").value = S.viz; $("#viz").onchange = e => { S.viz = e.target.value; saveSettings(); renderTimeline(); };
   $("#synth-vol").value = S.synthVol; $("#synth-vol-val").textContent = Math.round(S.synthVol * 100) + "%";
   $("#synth-vol").oninput = e => { S.synthVol = +e.target.value; $("#synth-vol-val").textContent = Math.round(S.synthVol * 100) + "%"; saveSettings(); if (DRONE) DRONE.out.gain.setTargetAtTime(0.11 * Math.max(0.001, S.synthVol), actx.currentTime, 0.05); };
@@ -421,6 +433,27 @@ function droneStop() {
   oscs.forEach(o => o.stop(t + 0.35));
   $("#hq-drone").classList.remove("on");
 }
+// ---------- centring progression: a short chord loop in the hook's key, ending on home ----------
+const MAJ = [0, 4, 7], MIN = [0, 3, 7];
+const PROGRESSIONS = {   // [semitones above the tonic, triad] per Theorytab key mode
+  major: { name: "I–V–vi–IV–I", chords: [[0, MAJ], [7, MAJ], [9, MIN], [5, MAJ], [0, MAJ]] },
+  mixolydian: { name: "I–♭VII–IV–I", chords: [[0, MAJ], [10, MAJ], [5, MAJ], [0, MAJ]] },
+  minor: { name: "i–VI–III–VII–i", chords: [[0, MIN], [8, MAJ], [3, MAJ], [10, MAJ], [0, MIN]] },
+  harmonicMinor: { name: "i–iv–V–i", chords: [[0, MIN], [5, MIN], [7, MAJ], [0, MIN]] },
+  dorian: { name: "i–IV–♭VII–i", chords: [[0, MIN], [5, MAJ], [10, MAJ], [0, MIN]] },
+  phrygian: { name: "i–♭II–i", chords: [[0, MIN], [1, MAJ], [0, MIN]] },
+  phrygianDominant: { name: "I–♭II–I", chords: [[0, MAJ], [1, MAJ], [0, MAJ]] },
+};
+const progressionFor = (h) => PROGRESSIONS[h.key.split(" ")[1]] || PROGRESSIONS[h.key.includes("minor") ? "minor" : "major"];
+function playProgression(h) {
+  stopClip();
+  const P = progressionFor(h), T = droneMidi(h) + 12, beat = 0.7;   // T: the tonic an octave above the drone
+  P.chords.forEach(([root, triad], i) => {
+    const last = i === P.chords.length - 1, at = 0.05 + i * beat, dur = last ? 1.6 : beat + 0.15;
+    synthNote(T - 12 + root, at, dur, 0.16);   // bass on the root
+    for (const iv of triad) { const pc = (root + iv) % 12; synthNote(T + (pc < 3 ? pc + 12 : pc), at, dur, 0.09); }   // close voicing just above the tonic
+  });
+}
 const DEG_ORDER = ["1", "#1", "b2", "2", "#2", "b3", "3", "4", "#4", "b5", "5", "#5", "b6", "6", "#6", "b7", "7"];
 const PC_NAMES = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"];
 const relativeTonic = (h) => (h.tonic + (h.key.includes("minor") ? 3 : 9)) % 12;   // the relative major's / minor's tonic
@@ -437,7 +470,7 @@ function hookInPool(h) {
   const r = HR[h.id];
   if (r === "down") return false;
   if (r === "up") return true;
-  return h.phrase < S.phrases && S.hookSections.includes(sectionKind(h.section));
+  return h.phrase === 0 && S.hookSections.includes(sectionKind(h.section));   // the first phrase of a section is its hook; 👍 pins any other
 }
 function hookPool() { return DATA ? DATA.hooks.filter(hookInPool) : []; }
 function ivChip(iv, i, firstIdx) {
@@ -494,10 +527,7 @@ function buildHooks() {
     sc.append(chip);
   }
   $("#hook-mode").value = S.hookMode; $("#hook-mode").onchange = e => { S.hookMode = e.target.value; saveSettings(); };
-  $("#hook-phrases").value = String(S.phrases); $("#hook-phrases").onchange = e => { S.phrases = +e.target.value; saveSettings(); refreshHooks(); };
   $("#hook-choices").value = S.hookChoices; $("#hook-choices").onchange = e => { S.hookChoices = e.target.value; saveSettings(); };
-  $("#hook-auto-tone").checked = S.hookAutoTone; $("#hook-auto-tone-wrap").classList.toggle("on", S.hookAutoTone);
-  $("#hook-auto-tone").onchange = e => { S.hookAutoTone = e.target.checked; $("#hook-auto-tone-wrap").classList.toggle("on", S.hookAutoTone); saveSettings(); };
   Promise.all([...new Set(DATA.hooks.filter(hookEligible).map(h => h.youtubeId))].map(loadLyrics)).then(refreshHooks);
   refreshHooks();
 }
@@ -508,16 +538,6 @@ function refreshHooks() {
   const unseen = pool.filter(h => !SEEN[h.id]).length;
   $("#hooks-pool-info").textContent = `${pool.length} hooks from ${songs.size} songs in the pool · ${unseen} not yet asked`;
   $("#hooks-start").disabled = pool.length < 1;
-  const first = {}, any = {};
-  const deg = S.labels === "degrees";
-  const cols = deg ? DEG_ORDER.filter(d => d.length === 1 || pool.some(h => h.notes.some(n => n.sd === d))) : INTERVAL_ORDER;
-  for (const h of pool) {
-    const f = deg ? h.firstSd : h.firstInterval; first[f] = (first[f] || 0) + 1;
-    for (const i of new Set(deg ? h.notes.map(n => n.sd) : h.intervals.filter(iv => iv.dir !== "same").map(iv => iv.label))) any[i] = (any[i] || 0) + 1;
-  }
-  $("#hooks-coverage").innerHTML = `<tr><th>${deg ? "Degree" : "Interval"}</th>${cols.map(i => `<th>${deg ? degText(i) : i}</th>`).join("")}</tr>` +
-    `<tr><td class="muted">${deg ? "starts on" : "first move"}</td>${cols.map(i => `<td class="${(first[i] || 0) >= 2 ? "pct-ok" : first[i] ? "pct-mid" : "pct-bad"}">${first[i] || 0}</td>`).join("")}</tr>` +
-    `<tr><td class="muted">anywhere</td>${cols.map(i => `<td>${any[i] || 0}</td>`).join("")}</tr>`;
   // song checklist: ticked = in S.songs; counts ignore the tick so you can see what a song would contribute
   const tb = $("#song-list tbody"); tb.innerHTML = "";
   for (const sName of SONGS) {
@@ -531,7 +551,7 @@ function refreshHooks() {
   }
 }
 function hookEligibleAnySong(h) { return !h.unavailable && !(S.skipSuspect && h.timing === "suspect") && h.firstInterval; }
-function hookInPoolAnySong(h) { const r = HR[h.id]; return r === "down" ? false : r === "up" ? true : h.phrase < S.phrases && S.hookSections.includes(sectionKind(h.section)); }
+function hookInPoolAnySong(h) { const r = HR[h.id]; return r === "down" ? false : r === "up" ? true : h.phrase === 0 && S.hookSections.includes(sectionKind(h.section)); }
 $("#songs-all").onclick = () => { S.songs = SONGS.slice(); saveSettings(); refreshHooks(); };
 $("#songs-none").onclick = () => { S.songs = []; saveSettings(); refreshHooks(); };
 function rateHook(id, r) { if (HR[id] === r) delete HR[id]; else HR[id] = r; saveHR(); refreshHooks(); if (HQ && HQ.hook.id === id) renderHQButtons(); }
@@ -563,7 +583,10 @@ function nextHook() {
   const deg = S.labels === "degrees";
   $("#hq-ivs").innerHTML = "";
   const a = $("#hq-answers"); a.innerHTML = ""; a.classList.toggle("songs", mode === "song"); a.classList.toggle("keys", mode === "tonic");
-  $("#hq-tone").disabled = mode === "tonic"; $("#hq-drone").disabled = mode === "tonic";
+  // each exercise gets its own tools: tonic and song are bare (the clip / your head is the reference); degrees get the note, the progression and the drone
+  const tools = mode === "interval";
+  for (const b of ["#hq-tone", "#hq-prog", "#hq-drone"]) $(b).classList.toggle("hidden", !tools);
+  $("#hq-prog-name").textContent = progressionFor(h).name;
   if (mode === "tonic") {
     HQ.sel = null; h = { ...h, long: true };
     $("#hq-prompt").innerHTML = `Where is home? <span class="muted">Play the hook (<kbd>space</kbd>, as often as you like), then find its tonic on the keyboard. Keys sound when clicked; the highlighted key is your answer.</span>`;
@@ -580,7 +603,7 @@ function nextHook() {
     renderKeys();
     $("#hq-play").disabled = false; $("#hq-play").title = "";
   } else if (mode === "song") {
-    $("#hq-prompt").innerHTML = `Which song is this hook from? <span class="muted">${h.n} notes${deg ? ", degrees against the tonic" : ""}. Start from the tone, hear it in your head.</span>`;
+    $("#hq-prompt").innerHTML = `Which song is this hook from? <span class="muted">${h.n} notes${deg ? ", degrees against the tonic" : ""}. Hear it in your head.</span>`;
     renderSeq();
     $("#hq-play").disabled = true; $("#hq-play").title = "plays after you answer";
     const others = [...new Set(hookPool().map(x => x.song))].filter(s => s !== h.song).sort(() => Math.random() - 0.5);
@@ -602,13 +625,12 @@ function nextHook() {
   }
   showClip(HQ.target !== undefined ? { ...h, targetAbs: h.noteIndex + HQ.target } : h, false); updateCover();
   if (currentVideo !== h.youtubeId && playerReady) { currentVideo = h.youtubeId; player.cueVideoById(h.youtubeId, clipWindow(h).start); }
-  if (S.drone && mode !== "tonic") droneStart(h);
-  if (S.hookAutoTone && mode !== "tonic") startingTone();
+  if (S.drone && tools) droneStart(h);
   if (mode === "tonic") setTimeout(() => { if (HQ && HQ.hook.id === h.id && !HQ.revealed) playClip(hookClip(), 1); }, 400);
 }
 function renderDegPrompt() {
   const h = HQ.hook, lyrH = hookLyricHtml(h, HQ.target);
-  $("#hq-prompt").innerHTML = `<strong>${h.song}</strong> <span class="muted">· ${h.section} · ${h.key.split(" ")[1]} key</span>${lyrH ? `<span class="lyric">“${lyrH}”</span>` : ""}<br><span class="muted">Name each note in turn; a miss keeps you on the note. Now note <strong>${HQ.target + 1}</strong> of ${h.n}: the ? below, highlighted in the strip${lyrH.includes("hit") ? ", bold in the lyric" : ""}. The drone is the tonic; <kbd>t</kbd> plays the current note; keys 1–7 answer. Playing the clip counts as a hint.</span>`;
+  $("#hq-prompt").innerHTML = `<strong>${h.song}</strong> <span class="muted">· ${h.section} · ${h.key.split(" ")[1]} key</span>${lyrH ? `<span class="lyric">“${lyrH}”</span>` : ""}<br><span class="muted">Name each note in turn; a miss keeps you on the note. Now note <strong>${HQ.target + 1}</strong> of ${h.n}: the ? below, highlighted in the strip${lyrH.includes("hit") ? ", bold in the lyric" : ""}. The drone is the tonic; <kbd>c</kbd> plays a progression in the key; <kbd>t</kbd> plays the current note; keys 1–7 answer. Playing the clip counts as a hint.</span>`;
 }
 function answerHook(ans) {
   if (HQ.answered) return;
@@ -683,10 +705,12 @@ $("#hooks-start").onclick = startHooks; $("#hooks-again").onclick = startHooks;
 $("#hooks-end-early").onclick = () => { droneStop(); stopClip(); if (SESSION && SESSION.results.length) finishHooks(); else { SESSION = null; HQ = null; $("#hooks-live").classList.add("hidden"); $("#hooks-idle").classList.remove("hidden"); updateCover(); refreshHooks(); } };
 function hookClip() { const h = HQ.hook; return HQ.mode === "tonic" ? { ...h, long: true, targetAbs: h.targetAbs } : HQ.target !== undefined ? { ...h, targetAbs: h.noteIndex + HQ.target } : h; }
 $("#hq-play").onclick = () => { if (!HQ || $("#hq-play").disabled) return; if (!HQ.revealed) { HQ.plays++; if (HQ.mode !== "tonic") $("#hq-play-status").textContent = "hint used"; } playClip(hookClip(), 1); };
-function startingTone() { if (!HQ) return; stopClip(); synthNote(HQ.hook.notes[HQ.target ?? 0].midi, 0.05, 1.2, 0.3); }
+const hasDrone = () => HQ && !$("#hq-drone").classList.contains("hidden");   // the degrees exercise's tools: note, progression, drone
+function startingTone() { if (!hasDrone()) return; stopClip(); synthNote(HQ.hook.notes[HQ.target ?? 0].midi, 0.05, 1.2, 0.3); }
 $("#hq-tone").onclick = startingTone;
+$("#hq-prog").onclick = () => { if (hasDrone()) playProgression(HQ.hook); };
 $("#hq-next").onclick = () => { stopClip(); droneStop(); nextHook(); };
-$("#hq-drone").onclick = () => { if (!HQ || HQ.revealed) return; DRONE ? droneStop() : droneStart(HQ.hook); };
+$("#hq-drone").onclick = () => { if (!hasDrone() || HQ.revealed) return; DRONE ? droneStop() : droneStart(HQ.hook); };
 $("#hq-up").onclick = () => rateHook(HQ.hook.id, "up");
 $("#hq-down").onclick = () => rateHook(HQ.hook.id, "down");
 $("#hooks-copy-results").onclick = () => navigator.clipboard.writeText($("#hooks-results-text").textContent).then(() => $("#hooks-copy-results").textContent = "Copied");
@@ -694,6 +718,7 @@ document.addEventListener("keydown", (e) => {
   if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT" || !HQ) return;
   if (e.code === "Space") { e.preventDefault(); $("#hq-play").click(); }
   if (e.key === "t" || e.key === "T") { e.preventDefault(); startingTone(); }
+  if (e.key === "c" || e.key === "C") { e.preventDefault(); $("#hq-prog").click(); }
   if (HQ.mode === "degrees" && !HQ.answered && /^[1-7]$/.test(e.key)) { e.preventDefault(); answerHook(e.key); }
   if (e.key === "d" || e.key === "D") { e.preventDefault(); $("#hq-drone").click(); }
   if (e.key === "Enter" && HQ.revealed) { e.preventDefault(); $("#hq-next").click(); }
