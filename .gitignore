@@ -1,0 +1,16 @@
+.vercel
+data/audio/
+.venv/
+data/audio
+
+# Not distributed with this repo; regenerate with the pipeline (README: Data).
+data/raw/
+data/clips_full.json
+public/clips.json
+public/lyrics/
+data/spotify_top.json
+data/spotify_playlists.json
+data/spotify_candidates.txt
+.vercel
+.vercelignore
+public-mirror.exclude

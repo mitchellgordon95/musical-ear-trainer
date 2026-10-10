@@ -1,0 +1,703 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Musical Ear Trainer</title>
+<meta name="description" content="Musical Ear Trainer: learn to hear tonics, scale degrees and intervals from short slices of real songs. Open source.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%276%27 fill=%27%236ea8fe%27/%3E%3Ctext x=%2716%27 y=%2723%27 font-size=%2720%27 text-anchor=%27middle%27 fill=%27%230b1020%27 font-family=%27sans-serif%27%3E%E2%99%AA%3C/text%3E%3C/svg%3E">
+<style>
+  :root { --bg:#0f1115; --panel:#181b22; --line:#2a2f3a; --fg:#e6e8ee; --dim:#9aa3b2; --acc:#6ea8fe; --ok:#3ecf8e; --bad:#ff6b6b; --warn:#ffb020; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  header { display:flex; align-items:center; gap:18px; padding:12px 20px; border-bottom:1px solid var(--line); }
+  header h1 { font-size:18px; margin:0; letter-spacing:.3px; }
+  header nav button { background:none; border:none; color:var(--dim); font-size:15px; padding:6px 10px; cursor:pointer; border-radius:6px; }
+  header nav button.active { color:var(--fg); background:var(--panel); }
+  header .spacer { flex:1; }
+  header .meta { color:var(--dim); font-size:13px; }
+  header a.gh { color:var(--dim); font-size:13px; text-decoration:none; border:1px solid var(--line); border-radius:6px; padding:3px 9px; white-space:nowrap; }
+  header a.gh:hover { color:var(--fg); border-color:var(--acc); }
+  main { display:grid; grid-template-columns: 1fr 380px; gap:18px; padding:18px 20px; max-width:1300px; margin:0 auto; }
+  @media (max-width: 900px) { main { grid-template-columns:1fr; } }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px; }
+  .panel h2 { font-size:14px; text-transform:uppercase; letter-spacing:.8px; color:var(--dim); margin:0 0 10px; }
+  button.btn { background:#232835; color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:10px 14px; font-size:15px; cursor:pointer; }
+  button.btn:hover { border-color:var(--acc); }
+  button.btn.primary { background:var(--acc); color:#0b1020; border-color:var(--acc); font-weight:600; }
+  button.btn:disabled { opacity:.45; cursor:default; }
+  .answers { display:grid; grid-template-columns: repeat(auto-fill, minmax(78px,1fr)); gap:8px; margin:12px 0; }
+  .answers button { padding:14px 6px; font-size:17px; font-weight:600; }
+  .answers button.correct { background:var(--ok); color:#06261a; border-color:var(--ok); }
+  .answers button.wrong { background:var(--bad); color:#2b0a0a; border-color:var(--bad); }
+  .hints { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0; }
+  .hints button.used { border-style:dashed; color:var(--dim); }
+  .video { position:relative; aspect-ratio:16/9; background:#000; border-radius:10px; overflow:hidden; }
+  .video iframe { width:100%; height:100%; display:block; }
+  .cover { position:absolute; inset:0; background:linear-gradient(160deg,#1a1f2b,#0f1115); display:flex; align-items:center; justify-content:center; color:var(--dim); font-size:15px; text-align:center; padding:20px; }
+  .cover.hidden { display:none; }
+  .status { color:var(--dim); font-size:13px; margin-top:8px; min-height:18px; }
+  .reveal { margin-top:12px; padding:12px; border:1px solid var(--line); border-radius:8px; background:#12151c; }
+  .reveal a { color:var(--acc); }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; }
+  .chip { display:inline-flex; align-items:center; gap:6px; padding:5px 9px; border:1px solid var(--line); border-radius:999px; font-size:13px; cursor:pointer; user-select:none; }
+  .chip input { margin:0; }
+  .chip.on { border-color:var(--acc); background:#1b2333; }
+  .row { display:flex; align-items:center; gap:10px; margin:8px 0; flex-wrap:wrap; }
+  label.small { color:var(--dim); font-size:13px; }
+  select, input[type=number] { background:#232835; color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:6px 8px; font-size:14px; }
+  input[type=range] { width:140px; }
+  table { width:100%; border-collapse:collapse; font-size:13.5px; }
+  th, td { text-align:left; padding:7px 8px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  th { color:var(--dim); font-weight:500; cursor:pointer; position:sticky; top:0; background:var(--panel); }
+  tr.bad td { opacity:.45; text-decoration:line-through; }
+  tr.playing td { background:#1b2333; }
+  .tablewrap { max-height:70vh; overflow:auto; }
+  .tiny { background:none; border:1px solid var(--line); color:var(--fg); border-radius:6px; padding:3px 8px; cursor:pointer; font-size:13px; }
+  .tiny.bad { border-color:var(--bad); color:var(--bad); }
+  .summary td, .summary th { padding:5px 8px; }
+  .pct-ok { color:var(--ok); } .pct-mid { color:var(--warn); } .pct-bad { color:var(--bad); }
+  .muted { color:var(--dim); }
+  .hidden { display:none !important; }
+  pre.results { background:#0b0d12; border:1px solid var(--line); padding:10px; border-radius:8px; white-space:pre-wrap; font-size:13px; }
+  .timeline { position:relative; height:64px; background:#0b0d12; border:1px solid var(--line); border-radius:8px; margin-top:10px; overflow:hidden; }
+  .timeline .note { position:absolute; height:10px; background:#3a4257; border-radius:3px; transition:top .35s ease, height .35s ease; }
+  .timeline .note.target { background:var(--acc); box-shadow:0 0 0 1px #0b1020 inset; }
+  .timeline .note.target.a { background:var(--warn); }
+  .timeline .playhead { position:absolute; top:0; bottom:0; width:2px; background:#fff; opacity:.8; left:0; }
+  .timeline .playhead.hidden { display:none; }
+  .timeline .note.sounding { filter:brightness(1.6); transform:scaleY(1.9); box-shadow:0 0 10px rgba(255,255,255,.35); transition:none; }
+  .timeline .note.sounding.target { filter:brightness(1.35); }
+  .timeline .win { position:absolute; top:0; bottom:0; background:rgba(110,168,254,.06); border-left:1px dashed #3a4257; border-right:1px dashed #3a4257; }
+  .timeline .label { position:absolute; bottom:3px; font-size:10px; color:var(--dim); }
+  .lyrics { margin-top:8px; font-size:14px; line-height:1.6; min-height:22px; color:var(--dim); }
+  .lyrics .line { display:block; }
+  .lyrics .hit { color:var(--fg); background:#2a3a55; border-radius:3px; padding:0 3px; }
+  .lyrics .now { color:var(--fg); }
+  kbd { background:#232835; border:1px solid var(--line); border-radius:4px; padding:0 5px; font-size:12px; }
+  main > section { min-width:0; }
+  .answers.songs { display:flex; flex-wrap:wrap; }
+  .answers.keys { display:flex; flex-wrap:wrap; gap:4px; align-items:flex-end; }
+  .answers.keys button.key { min-width:42px; padding:22px 0 8px; font-size:13px; font-weight:500; }
+  .answers.keys button.key.black { background:#0b0d12; color:var(--dim); padding-top:10px; padding-bottom:20px; }
+  .answers.keys button.key.sel { border-color:var(--acc); box-shadow:0 0 0 2px var(--acc) inset; color:var(--fg); }
+  .answers.keys button.submit { margin-left:12px; }
+  .answers.keys .oct { display:flex; align-items:center; gap:4px; margin-left:12px; color:var(--dim); font-size:13px; }
+  .answers.keys button.key.correct, .answers.keys button.key.black.correct { background:var(--ok); color:#06261a; border-color:var(--ok); }
+  .answers.keys button.key.wrong, .answers.keys button.key.black.wrong { background:var(--bad); color:#2b0a0a; border-color:var(--bad); }
+  .answers.keys button.key.near, .answers.keys button.key.black.near { background:var(--warn); color:#3a2500; border-color:var(--warn); }
+  .answers.songs button { font-size:15px; padding:10px 14px; font-weight:500; }
+  #song-list td { padding:6px 8px; } #song-list tr.bad td { opacity:.55; }
+  .ivseq { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0; align-items:center; }
+  .iv { font-size:22px; padding:8px 12px; background:#232835; border:1px solid var(--line); border-radius:8px; }
+  .iv.same { color:var(--dim); font-size:15px; padding:6px 9px; }
+  .iv.first { border-color:var(--acc); }
+  .iv.up { color:#9fd1ff; } .iv.down { color:#ffc98a; }
+  .iv.deg { color:var(--fg); min-width:46px; text-align:center; }
+  .iv.blank { color:var(--dim); }
+  .iv.correct { border-color:var(--ok); color:var(--ok); }
+  .iv.wrong { border-color:var(--bad); color:var(--bad); }
+  .iv.wrong s { color:var(--dim); font-size:13px; margin-right:4px; }
+  .ivrow { display:flex; flex-wrap:wrap; gap:8px; align-items:center; flex-basis:100%; }
+  .iv.blank.first { color:var(--warn); border-color:var(--warn); }
+  .ivseq .arrow { color:var(--dim); font-size:14px; }
+  .tiny.on { border-color:var(--acc); color:var(--acc); }
+  .hookq { font-size:20px; margin:10px 0 4px; }
+  .hookq .lyric { color:var(--dim); font-style:italic; font-size:16px; display:block; margin-top:4px; }
+  .tiny.up { border-color:var(--ok); color:var(--ok); }
+  .ivmini { font-size:12px; color:var(--dim); white-space:nowrap; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Musical Ear Trainer</h1>
+  <span class="muted">hooks → intervals → songs</span>
+  <div class="spacer"></div>
+  <div class="meta" id="meta">loading clips…</div>
+  <a class="gh" href="https://github.com/mitchellgordon95/musical-ear-trainer" target="_blank" rel="noopener" title="Source code (MIT)">Source on GitHub</a>
+</header>
+
+<main>
+  <section>
+    <!-- HOOKS -->
+    <div id="tab-hooks">
+      <div class="panel">
+        <div id="hooks-idle">
+          <p class="muted">Three exercises on hooks you know by heart, all against a tonal centre. <strong>1 · Find the tonic:</strong> the hook plays; find home on the little keyboard. <strong>2 · Name the degrees:</strong> the song is shown; name every note of the hook as a scale degree over the tonic drone, staying on a note until you get it. <strong>3 · Name the song:</strong> the degrees are shown and the title is hidden; hear it in your head and say which song it is. The real clip plays after each answer. No singing required.</p>
+          <div class="row">
+            <label class="small">Mode</label>
+            <select id="hook-mode"><option value="tonic">1 · find the tonic</option><option value="interval">2 · name the degrees</option><option value="song">3 · name the song</option><option value="mixed">mixed</option></select>
+            <label class="small">Phrases per section</label>
+            <select id="hook-phrases"><option value="1">first only</option><option value="2">first 2</option><option value="3">first 3</option><option value="99">all</option></select>
+            <label class="small">Choices</label>
+            <select id="hook-choices"><option>4</option><option>6</option><option>8</option><option value="all">all songs</option></select>
+            <button class="btn primary" id="hooks-start">Start</button>
+            <span class="muted" id="hooks-pool-info"></span>
+          </div>
+          <div class="row"><label class="chip" id="hook-auto-tone-wrap"><input type="checkbox" id="hook-auto-tone"> play the starting tone on each hook</label></div>
+          <div class="row" style="margin-top:10px"><label class="small">Sections in the pool</label></div>
+          <div class="chips" id="hook-section-chips"></div>
+          <h2 style="margin-top:16px">Anchors</h2>
+          <table class="summary" id="hooks-coverage"></table>
+          <h2 style="margin-top:16px">Songs</h2>
+          <div class="row" style="justify-content:space-between">
+            <span class="muted">Tick the songs to draw hooks from. Known or not, your call. Per song: hooks in the pool and their first moves.</span>
+            <div class="row"><button class="tiny" id="songs-all">all</button><button class="tiny" id="songs-none">none</button></div>
+          </div>
+          <div class="tablewrap"><table id="song-list"><tbody></tbody></table></div>
+        </div>
+
+        <div id="hooks-live" class="hidden">
+          <div class="row" style="justify-content:space-between">
+            <div><strong id="hq-num"></strong> <span class="muted" id="hq-score"></span></div>
+            <button class="btn" id="hooks-end-early">Stop</button>
+          </div>
+          <div id="hq-prompt" class="hookq"></div>
+          <div class="ivseq" id="hq-ivs"></div>
+          <div class="row">
+            <button class="btn" id="hq-tone" title="The question's note on a synth over the tonic: a reference, not a hint">♪ Tone <kbd>t</kbd></button>
+            <button class="tiny" id="hq-drone" title="Tonic drone on/off"><kbd>d</kbd> drone</button>
+            <button class="btn" id="hq-play">▶ Play hook</button>
+            <span class="status" id="hq-play-status"></span>
+          </div>
+          <div class="answers" id="hq-answers"></div>
+          <div class="reveal hidden" id="hq-reveal"></div>
+          <div class="row">
+            <button class="btn primary hidden" id="hq-next">Next <kbd>enter</kbd></button>
+            <button class="tiny hidden" id="hq-up" title="Good hook: keep it in the pool">👍</button>
+            <button class="tiny hidden" id="hq-down" title="Not a hook I know: drop it">👎</button>
+          </div>
+        </div>
+
+        <div id="hooks-done" class="hidden">
+          <h2>Session</h2>
+          <table class="summary" id="hooks-summary"></table>
+          <pre class="results" id="hooks-results-text"></pre>
+          <div class="row">
+            <button class="btn" id="hooks-copy-results">Copy results</button>
+            <button class="btn primary" id="hooks-again">Start again</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </section>
+
+  <aside>
+    <div class="video">
+      <div id="player"></div>
+      <div class="cover" id="cover">Video hidden until you answer</div>
+    </div>
+    <div class="status" id="video-status"></div>
+    <div class="timeline" id="timeline"></div>
+    <div class="lyrics" id="lyrics"></div>
+
+    <div class="panel" style="margin-top:14px">
+      <h2>Settings</h2>
+      <div class="row">
+        <label class="small">Visualizer</label>
+        <select id="viz"><option value="pop">pop on each note</option><option value="slider">smooth slider</option><option value="both">both</option></select>
+      </div>
+      <div class="row">
+        <label class="small">Synth volume (keys, tone, drone) <span id="synth-vol-val"></span></label>
+        <input type="range" id="synth-vol" min="0" max="1.5" step="0.05">
+      </div>
+      <div class="row">
+        <label class="small">Find-the-tonic clip: chord changes</label>
+        <input type="number" id="tonic-chords" min="1" max="12" step="1" style="width:60px">
+      </div>
+      <div class="row">
+        <label class="small">Labels</label>
+        <select id="labels"><option value="degrees">scale degrees (1 ↓7 ↑2)</option><option value="intervals">intervals (M2↓ m3↑)</option></select>
+        <label class="chip" id="drone-wrap"><input type="checkbox" id="drone"> tonic drone</label>
+      </div>
+      <div class="row">
+        <label class="chip" id="strip-wrap"><input type="checkbox" id="strip"> note strip (rhythm before, pitch after)</label>
+        <label class="chip" id="show-lyrics-wrap"><input type="checkbox" id="show-lyrics"> lyrics on reveal</label>
+        <label class="chip" id="skip-suspect-wrap"><input type="checkbox" id="skip-suspect"> skip suspect-timing sections</label>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<script>
+// ---------- data + settings ----------
+const INTERVAL_ORDER = ["m2","M2","m3","M3","P4","TT","P5","m6","M6","m7","M7","P8"];
+let DATA = null, SONGS = [];
+const SONGS_OFF_BY_DEFAULT = ["Kenshi Yonezu – KICK BACK", "Kenshi Yonezu – Lemon", "YOASOBI – Idol"];   // anime-list songs, unticked unless you tick them
+const S = loadSettings();
+function loadSettings() {
+  const d = { padBefore: 0.15, padAfter: 0.25, viz: "pop", showLyrics: true, skipSuspect: true, songs: null, songsSeen: [], hookMode: "song", hookChoices: "4", hookSections: ["Chorus"], hookAutoTone: true, labels: "degrees", drone: true, strip: true, tonicChords: 4, synthVol: 1, keyOctave: 0, phrases: 1 };
+  try { return Object.assign(d, JSON.parse(localStorage.getItem("it-settings") || "{}")); } catch { return d; }
+}
+function saveSettings() { try { localStorage.setItem("it-settings", JSON.stringify(S)); } catch {} }
+let SEEN = {};   // hook id -> last time it was asked (ms); rounds prefer the least recently seen
+try { SEEN = JSON.parse(localStorage.getItem("it-seen") || "{}"); } catch {}
+function saveSeen() { try { localStorage.setItem("it-seen", JSON.stringify(SEEN)); } catch {} }
+let HR = {};   // hook ratings: id -> "up" | "down"
+try { HR = JSON.parse(localStorage.getItem("it-hooks") || "{}"); } catch {}
+function saveHR() { try { localStorage.setItem("it-hooks", JSON.stringify(HR)); } catch {} }
+
+const $ = (s) => document.querySelector(s);
+const el = (tag, attrs = {}, ...kids) => { const e = document.createElement(tag); for (const [k, v] of Object.entries(attrs)) { if (k === "class") e.className = v; else if (k.startsWith("on")) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v); } for (const k of kids) e.append(k); return e; };
+const fmtTime = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
+
+fetch("clips.json", { cache: "no-cache" }).then(r => r.json()).then(d => {
+  DATA = d;
+  DATA.hooks = DATA.hooks || [];
+  for (const h of DATA.hooks) { const s = DATA.sections[h.sectionKey]; h.song = `${s.artist} – ${s.title}`; h.section = s.section; h.youtubeId = s.youtubeId; h.timing = s.timing; h.unavailable = !!s.unavailable; h.onsetA = h.start; h.isHook = true; h.hookLen = h.n; }
+  SONGS = [...new Set(Object.values(DATA.sections).map(s => `${s.artist} – ${s.title}`))].sort();
+  if (!S.songs) S.songs = SONGS.slice();
+  for (const sName of SONGS) if (!S.songsSeen.includes(sName)) { S.songsSeen.push(sName); if (!S.songs.includes(sName) && !SONGS_OFF_BY_DEFAULT.includes(sName)) S.songs.push(sName); }   // new songs start ticked unless listed off
+  if ((S.songsDefaultsVersion || 0) < 1) { S.songs = S.songs.filter(x => !SONGS_OFF_BY_DEFAULT.includes(x)); S.songsDefaultsVersion = 1; }   // 2026-10-02: anime songs off (Mitchell)
+  saveSettings();
+  const dead = Object.values(DATA.sections).filter(s => s.unavailable).length;
+  $("#meta").textContent = `${DATA.hooks.length} hooks · ${Object.keys(DATA.sections).length} sections · ${SONGS.length} songs · data ${DATA.generated}${dead ? ` · ${dead} sections skipped (video unavailable)` : ""}`;
+  buildSettings(); buildHooks();
+});
+
+function buildSettings() {
+  $("#labels").value = S.labels; $("#labels").onchange = e => { S.labels = e.target.value; saveSettings(); refreshHooks(); if (HQ) renderSeq(); };
+  $("#drone").checked = S.drone; $("#drone-wrap").classList.toggle("on", S.drone);
+  $("#drone").onchange = e => { S.drone = e.target.checked; $("#drone-wrap").classList.toggle("on", S.drone); saveSettings(); if (HQ && !HQ.revealed) (S.drone ? droneStart(HQ.hook) : droneStop()); };
+  $("#viz").value = S.viz; $("#viz").onchange = e => { S.viz = e.target.value; saveSettings(); renderTimeline(); };
+  $("#synth-vol").value = S.synthVol; $("#synth-vol-val").textContent = Math.round(S.synthVol * 100) + "%";
+  $("#synth-vol").oninput = e => { S.synthVol = +e.target.value; $("#synth-vol-val").textContent = Math.round(S.synthVol * 100) + "%"; saveSettings(); if (DRONE) DRONE.out.gain.setTargetAtTime(0.11 * Math.max(0.001, S.synthVol), actx.currentTime, 0.05); };
+  $("#tonic-chords").value = S.tonicChords; $("#tonic-chords").onchange = e => { S.tonicChords = Math.max(1, +e.target.value || 4); saveSettings(); };
+  $("#strip").checked = S.strip; $("#strip-wrap").classList.toggle("on", S.strip); $("#timeline").classList.toggle("hidden", !S.strip);
+  $("#strip").onchange = e => { S.strip = e.target.checked; $("#strip-wrap").classList.toggle("on", S.strip); $("#timeline").classList.toggle("hidden", !S.strip); saveSettings(); };
+  $("#show-lyrics").checked = S.showLyrics; $("#show-lyrics-wrap").classList.toggle("on", S.showLyrics);
+  $("#show-lyrics").onchange = e => { S.showLyrics = e.target.checked; $("#show-lyrics-wrap").classList.toggle("on", S.showLyrics); saveSettings(); renderLyrics(); };
+  $("#skip-suspect").checked = S.skipSuspect; $("#skip-suspect-wrap").classList.toggle("on", S.skipSuspect);
+  $("#skip-suspect").onchange = e => { S.skipSuspect = e.target.checked; $("#skip-suspect-wrap").classList.toggle("on", S.skipSuspect); saveSettings(); refreshHooks(); };
+}
+
+// ---------- cover ----------
+function updateCover() { $("#cover").classList.toggle("hidden", !(SESSION && HQ && !HQ.revealed && HQ.mode === "song")); }
+
+// ---------- YouTube player ----------
+let player = null, playerReady = false, currentVideo = null, stopTimer = null, pendingPlay = null;
+const tag = document.createElement("script"); tag.src = "https://www.youtube.com/iframe_api"; document.head.append(tag);
+window.onYouTubeIframeAPIReady = () => {
+  player = new YT.Player("player", {
+    width: "100%", height: "100%", videoId: "dLl4PZtxia8",
+    playerVars: { controls: 0, disablekb: 1, rel: 0, modestbranding: 1, playsinline: 1, fs: 0, iv_load_policy: 3, origin: location.origin },
+    events: {
+      onReady: () => { playerReady = true; currentVideo = "dLl4PZtxia8"; $("#video-status").textContent = "player ready"; },
+      onStateChange: (e) => {
+        if (e.data === YT.PlayerState.CUED && pendingPlay) { const p = pendingPlay; pendingPlay = null; p(); }
+        if (e.data === YT.PlayerState.PLAYING) watchStop();
+      },
+    },
+  });
+};
+function playClip(c, rate = 1) {
+  if (!playerReady) { $("#video-status").textContent = "player not ready yet"; return; }
+  stopClip();
+  const { start, end } = clipWindow(c);
+  showClip(SHOWN && SHOWN.clip.id === c.id ? SHOWN.clip : c, !(HQ && !HQ.revealed));
+  const go = () => {
+    player.setPlaybackRate(rate);
+    player.seekTo(start, true); player.playVideo();
+    clipEnd = end; clipStart = start;
+    $("#video-status").textContent = `${c.song} · ${c.section} · ${fmtTime(start)} → ${(end - start).toFixed(2)}s @${rate}x · target at ${(c.onsetA - start).toFixed(1)}s`;
+  };
+  if (currentVideo !== c.youtubeId) { currentVideo = c.youtubeId; pendingPlay = go; player.cueVideoById(c.youtubeId, start); }
+  else go();
+}
+let clipEnd = 0, clipStart = 0;
+function watchStop() {
+  clearInterval(stopTimer);
+  stopTimer = setInterval(() => {
+    if (!player || !clipEnd) return;
+    const t = player.getCurrentTime();
+    movePlayhead(t);
+    if (t >= clipEnd) { player.pauseVideo(); clearInterval(stopTimer); clipEnd = 0; document.querySelectorAll("#timeline .note.sounding").forEach(b => b.classList.remove("sounding")); }
+  }, 16);
+}
+function stopClip() { clearInterval(stopTimer); clipEnd = 0; pendingPlay = null; if (playerReady && player.getPlayerState && player.getPlayerState() === 1) player.pauseVideo(); }
+
+// ---------- context window, timeline, lyrics ----------
+let SHOWN = null; // {clip, win, revealed}
+function clipWindow(c) {
+  const s = DATA.sections[c.sectionKey], spb = s.secPerBeat || 0.5;
+  if (c.long) {   // find-the-tonic: start on the chord the hook begins in, run through S.tonicChords chord changes
+    const ch = s.chords || [], onsets = [];
+    for (const x of ch) if (!onsets.length || x.root !== ch[ch.indexOf(x) - 1].root || x.type !== ch[ch.indexOf(x) - 1].type) onsets.push(x.on);   // a repeated chord isn't a change
+    const inChord = onsets.filter(x => x <= c.onsetA + 0.05).pop();
+    const start = Math.max(0, Math.max(inChord ?? -1, c.onsetA - 2 * spb) - S.padBefore);
+    const after = onsets.filter(x => x > c.onsetA + 0.05);
+    const nth = after[S.tonicChords - 1];
+    const lastOff = ch.length ? ch[ch.length - 1].off : c.end;
+    const target = nth !== undefined ? Math.max(nth + 0.25, start + 8) : lastOff;   // through N changes, and at least 8 s (fast-changing songs)
+    const end = Math.max(c.end + 0.5 * spb, Math.min(target, lastOff + 0.3, start + 30)) + S.padAfter;
+    return { start, end };
+  }
+  return { start: Math.max(0, c.onsetA - 0.5 * spb - S.padBefore), end: c.end + 0.5 * spb + S.padAfter };
+}
+function showClip(c, revealed = true) {
+  const win = clipWindow(c);
+  SHOWN = { clip: c, win, revealed };
+  renderTimeline(); loadLyrics(c.youtubeId).then(() => { if (SHOWN && SHOWN.clip.id === c.id) renderLyrics(); });
+}
+function renderTimeline() {
+  const tl = $("#timeline"); tl.innerHTML = "";
+  if (!SHOWN) return;
+  const { clip: c, win, revealed } = SHOWN, s = DATA.sections[c.sectionKey], len = win.end - win.start;
+  const notes = (s.notes || []).map((n, i) => ({ ...n, i })).filter(n => n.off > win.start && n.on < win.end);
+  const lo = Math.min(...notes.map(n => n.midi)), hi = Math.max(...notes.map(n => n.midi)), PX = 3, mid = (lo + hi) / 2;
+  const height = revealed ? Math.max(64, (hi - lo) * PX + 30) : 64; tl.style.height = `${height}px`;
+  tl.append(el("div", { class: "win", style: `left:${100 * (c.onsetA - win.start) / len}%; width:${100 * (c.end - c.onsetA) / len}%` }));
+  for (const n of notes) {
+    const isA = n.i === (c.targetAbs ?? c.noteIndex), isB = n.i >= c.noteIndex && n.i < c.noteIndex + (c.hookLen || 2) && !isA;
+    const top = revealed ? height / 2 - 5 - (n.midi - mid) * PX : 27;   // true scale: every semitone is PX px, in every clip
+    const blk = el("div", { class: "note" + (isA || isB ? " target" : "") + (isA ? " a" : ""), title: revealed ? n.name : "", style: `left:${100 * (Math.max(n.on, win.start) - win.start) / len}%; width:${Math.max(0.6, 100 * (Math.min(n.off, win.end) - Math.max(n.on, win.start)) / len)}%; top:${top}px` });
+    blk.dataset.on = n.on; blk.dataset.off = n.off;
+    tl.append(blk);
+  }
+  tl.append(el("div", { class: "label", style: "left:4px" }, fmtTime(win.start)));
+  tl.append(el("div", { class: "label", style: "right:4px" }, `${len.toFixed(1)}s · ${revealed ? `pitch, ${hi - lo} st span` : "rhythm only"} · ${notes.length} notes`));
+  tl.append(el("div", { class: "playhead" + (S.viz === "pop" ? " hidden" : ""), id: "playhead", style: "left:0" }));
+}
+function movePlayhead(t) {
+  const ph = $("#playhead"); if (!ph || !SHOWN) return;
+  const { win } = SHOWN; ph.style.left = `${Math.min(100, Math.max(0, 100 * (t - win.start) / (win.end - win.start)))}%`;
+  if (S.viz !== "slider") for (const b of document.querySelectorAll("#timeline .note")) b.classList.toggle("sounding", t >= +b.dataset.on - 0.03 && t < +b.dataset.off - 0.03);
+  if (SHOWN.lyricLines) for (const { line, elm } of SHOWN.lyricLines) elm.classList.toggle("now", t >= line.t && t <= line.t + Math.max(line.d, 0.5));
+}
+const LYR = {};
+function loadLyrics(id) {
+  if (LYR[id] !== undefined) return Promise.resolve(LYR[id]);
+  return fetch(`lyrics/${id}.json`).then(r => r.ok ? r.json() : null).catch(() => null).then(d => (LYR[id] = d && d.lines && d.lines.length ? d : null));
+}
+function renderLyrics() {
+  const box = $("#lyrics"); box.innerHTML = ""; if (!SHOWN) return;
+  const { clip: c, win } = SHOWN, L = LYR[c.youtubeId];
+  if (!S.showLyrics || (HQ && !HQ.revealed)) { SHOWN.lyricLines = null; return; }
+  if (!L || L.kind === "asr") { box.textContent = L ? "only auto-generated captions exist for this video (not shown)" : "no aligned lyrics for this video"; SHOWN.lyricLines = null; return; }
+  const lines = L.lines.filter(l => l.t < win.end + 0.3 && l.t + Math.max(l.d, 0.5) > win.start - 0.3);
+  if (!lines.length) { box.textContent = `no caption lines in this window (${L.kind} ${L.lang})`; SHOWN.lyricLines = null; return; }
+  const a0 = c.onsetA - 0.15, b1 = c.end + 0.15;
+  SHOWN.lyricLines = [];
+  for (const line of lines) {
+    const elm = el("span", { class: "line" });
+    if (line.words) {
+      line.words.forEach((w, i) => { const wEnd = i + 1 < line.words.length ? line.words[i + 1].t : line.t + line.d; const hit = w.t < b1 && wEnd > a0; elm.append(el("span", { class: hit ? "hit" : "" }, w.w), " "); });
+    } else {
+      const hit = line.t < b1 && line.t + Math.max(line.d, 0.5) > a0; elm.append(el("span", { class: hit ? "hit" : "" }, line.text));
+    }
+    box.append(elm); SHOWN.lyricLines.push({ line, elm });
+  }
+  box.append(el("span", { class: "line muted", style: "font-size:11px" }, `lyrics: ${L.source === "lrclib" ? "lrclib, studio-track timing" : "video captions"} · line timing`));
+}
+
+// ---------- synth (simple e-piano) ----------
+let actx = null;
+function synthNote(midi, when, dur = 0.9, gain = 0.25) {
+  actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+  const t0 = actx.currentTime + when, f = 440 * Math.pow(2, (midi - 69) / 12);
+  gain = Math.max(0.0002, gain * S.synthVol);
+  const out = actx.createGain(); out.gain.setValueAtTime(0.0001, t0); out.gain.exponentialRampToValueAtTime(gain, t0 + 0.01); out.gain.exponentialRampToValueAtTime(0.0001, t0 + dur); out.connect(actx.destination);
+  [[1, 1], [2, 0.35], [3, 0.12], [4, 0.05]].forEach(([h, a]) => { const o = actx.createOscillator(); const g = actx.createGain(); o.type = "sine"; o.frequency.value = f * h; g.gain.value = a; o.connect(g); g.connect(out); o.start(t0); o.stop(t0 + dur + 0.05); });
+}
+function synthClip(c) { synthNote(c.notes[0].midi, 0, Math.max(0.6, Math.min(1.2, c.notes[0].dur * 1.5))); synthNote(c.notes[1].midi, Math.max(0.6, Math.min(1.2, c.notes[0].dur * 1.5)), 1.0); }
+
+// ---------- drone ----------
+let DRONE = null;
+function droneMidi(h) { const f = h.notes[0].midi; let t = f - ((f - h.tonic) % 12 + 12) % 12; if (t > f - 2) t -= 12; return Math.max(36, t - 12); }   // tonic, an octave-plus below the first note
+function droneStart(h) {
+  droneStop();
+  actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+  const m = droneMidi(h), f = 440 * Math.pow(2, (m - 69) / 12), t0 = actx.currentTime;
+  const out = actx.createGain(); out.gain.setValueAtTime(0.0001, t0); out.gain.exponentialRampToValueAtTime(0.11 * Math.max(0.001, S.synthVol), t0 + 0.6); out.connect(actx.destination);
+  const oscs = [[1, 1], [2, 0.45], [3, 0.12]].map(([h, a]) => { const o = actx.createOscillator(), g = actx.createGain(); o.type = "sine"; o.frequency.value = f * h; g.gain.value = a; o.connect(g); g.connect(out); o.start(t0); return o; });
+  DRONE = { out, oscs };
+  $("#hq-drone").classList.add("on");
+}
+function droneStop() {
+  if (!DRONE) return;
+  const { out, oscs } = DRONE, t = actx.currentTime; DRONE = null;
+  out.gain.cancelScheduledValues(t); out.gain.setValueAtTime(out.gain.value, t); out.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+  oscs.forEach(o => o.stop(t + 0.35));
+  $("#hq-drone").classList.remove("on");
+}
+const DEG_ORDER = ["1", "#1", "b2", "2", "#2", "b3", "3", "4", "#4", "b5", "5", "#5", "b6", "6", "#6", "b7", "7"];
+const PC_NAMES = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"];
+const relativeTonic = (h) => (h.tonic + (h.key.includes("minor") ? 3 : 9)) % 12;   // the relative major's / minor's tonic
+const degText = (sd) => sd.replace("b", "♭").replace("#", "♯");
+
+// ---------- hooks: degrees/intervals -> name the song, song -> name the first degree/interval ----------
+let SESSION = null, HQ = null, SECTION_KINDS = [];   // SESSION = { results, n }: an endless stream of hooks until Stop
+const sectionKind = (name) => name.replace(/\s*\d+$/, "");   // "Chorus 2" -> "Chorus"
+function hookEligible(h) {
+  return !h.unavailable && !(S.skipSuspect && h.timing === "suspect") && S.songs.includes(h.song) && h.firstInterval;
+}
+function hookInPool(h) {
+  if (!hookEligible(h)) return false;
+  const r = HR[h.id];
+  if (r === "down") return false;
+  if (r === "up") return true;
+  return h.phrase < S.phrases && S.hookSections.includes(sectionKind(h.section));
+}
+function hookPool() { return DATA ? DATA.hooks.filter(hookInPool) : []; }
+function ivChip(iv, i, firstIdx) {
+  const same = iv.dir === "same";
+  return el("span", { class: "iv " + iv.dir + (i === firstIdx ? " first" : ""), title: same ? "repeated note" : `${iv.semis > 0 ? "+" : ""}${iv.semis} semitones` }, same ? "·" : `${iv.label}${iv.dir === "up" ? "↑" : "↓"}`);
+}
+function ivText(h) {
+  if (S.labels === "degrees") return h.notes.map((n, i) => (i ? (n.midi > h.notes[i - 1].midi ? "↑" : n.midi < h.notes[i - 1].midi ? "↓" : "·") : "") + degText(n.sd)).join(" ");
+  return h.intervals.map(iv => iv.dir === "same" ? "·" : `${iv.label}${iv.dir === "up" ? "↑" : "↓"}`).join(" ");
+}
+function renderSeq(blank = false) {
+  const h = HQ.hook, box = $("#hq-ivs"); box.innerHTML = "";
+  if (S.labels === "degrees") {
+    const G = HQ.guesses || [];
+    // degrees imply direction (3→2 is down); an arrow only when the melody goes the far way round (a leap over a tritone)
+    const rowOf = (fn, label, arrows) => { const r = el("div", { class: "ivrow" }); if (label) r.append(el("span", { class: "muted", style: "min-width:40px" }, label)); h.notes.forEach((n, i) => { if (i && arrows) { const d = n.midi - h.notes[i - 1].midi; if (Math.abs(d) > 6) r.append(el("span", { class: "arrow", title: `${d > 0 ? "+" : ""}${d} st` }, d > 0 ? "↑" : "↓")); } r.append(fn(n, i)); }); return r; };
+    const solved = (n, i) => { const g = G[i], c = el("span", { class: "iv deg " + (g.wrong.length ? "wrong" : "correct"), title: g.wrong.length ? `took ${g.wrong.length + 1} tries` : "first try" }); for (const w of g.wrong) c.append(el("s", {}, degText(w))); c.append(degText(n.sd)); return c; };
+    if (blank) box.append(rowOf((n, i) => i < G.length ? solved(n, i) : el("span", { class: "iv deg blank" + (i === HQ.target ? " first" : ""), title: `note ${i + 1} of ${h.n}` }, i === HQ.target ? "?" : "·"), null, false));
+    else if (G.length) box.append(rowOf(solved, null, true));
+    else box.append(rowOf((n) => el("span", { class: "iv deg", title: n.name }, degText(n.sd)), null, true));
+    box.append(el("span", { class: "muted", style: "margin-left:8px" }, `in ${h.key.split(" ")[1]}`));
+  } else {
+    const firstIdx = h.intervals.findIndex(iv => iv.dir !== "same");
+    h.intervals.forEach((iv, i) => box.append(ivChip(iv, i, firstIdx)));
+  }
+}
+function hookLyric(h) {
+  const L = LYR[h.youtubeId]; if (!L || L.kind === "asr") return "";
+  const a0 = h.start - 0.15, b1 = h.end + 0.15, out = [];
+  for (const line of L.lines) {
+    if (line.words) { const ws = line.words.filter((w, i) => { const wEnd = i + 1 < line.words.length ? line.words[i + 1].t : line.t + line.d; return w.t < b1 && wEnd > a0; }); if (ws.length) out.push(ws.map(w => w.w).join(" ")); }
+    else if (line.t < b1 && line.t + Math.max(line.d, 0.5) > a0) out.push(line.text);
+  }
+  return out.join(" / ");
+}
+function hookLyricHtml(h, k) {
+  const L = LYR[h.youtubeId]; if (!L || L.kind === "asr") return "";
+  const sn = (DATA.sections[h.sectionKey].notes || [])[h.noteIndex + k], a0 = h.start - 0.15, b1 = h.end + 0.15, out = [];
+  for (const line of L.lines) {
+    if (line.words) {
+      const ws = line.words.map((w, i) => ({ w: w.w, t: w.t, end: i + 1 < line.words.length ? line.words[i + 1].t : line.t + line.d })).filter(w => w.t < b1 && w.end > a0);
+      if (ws.length) out.push(ws.map(w => (sn && w.t < sn.off && w.end > sn.on) ? `<strong class="hit">${w.w}</strong>` : w.w).join(" "));
+    } else if (line.t < b1 && line.t + Math.max(line.d, 0.5) > a0) out.push(line.text);
+  }
+  return out.join(" / ");
+}
+function buildHooks() {
+  SECTION_KINDS = [...new Set(Object.values(DATA.sections).map(s => sectionKind(s.section)))].sort((a, b) => DATA.hooks.filter(h => sectionKind(h.section) === b).length - DATA.hooks.filter(h => sectionKind(h.section) === a).length);
+  const sc = $("#hook-section-chips"); sc.innerHTML = "";
+  for (const k of SECTION_KINDS) {
+    const cb = el("input", { type: "checkbox" }); cb.checked = S.hookSections.includes(k);
+    const chip = el("label", { class: "chip" + (cb.checked ? " on" : "") }, cb, k);
+    cb.addEventListener("change", () => { S.hookSections = SECTION_KINDS.filter(x => x === k ? cb.checked : S.hookSections.includes(x)); chip.classList.toggle("on", cb.checked); saveSettings(); refreshHooks(); });
+    sc.append(chip);
+  }
+  $("#hook-mode").value = S.hookMode; $("#hook-mode").onchange = e => { S.hookMode = e.target.value; saveSettings(); };
+  $("#hook-phrases").value = String(S.phrases); $("#hook-phrases").onchange = e => { S.phrases = +e.target.value; saveSettings(); refreshHooks(); };
+  $("#hook-choices").value = S.hookChoices; $("#hook-choices").onchange = e => { S.hookChoices = e.target.value; saveSettings(); };
+  $("#hook-auto-tone").checked = S.hookAutoTone; $("#hook-auto-tone-wrap").classList.toggle("on", S.hookAutoTone);
+  $("#hook-auto-tone").onchange = e => { S.hookAutoTone = e.target.checked; $("#hook-auto-tone-wrap").classList.toggle("on", S.hookAutoTone); saveSettings(); };
+  Promise.all([...new Set(DATA.hooks.filter(hookEligible).map(h => h.youtubeId))].map(loadLyrics)).then(refreshHooks);
+  refreshHooks();
+}
+function refreshHooks() {
+  if (!DATA) return;
+  const pool = hookPool();
+  const songs = new Set(pool.map(h => h.song));
+  const unseen = pool.filter(h => !SEEN[h.id]).length;
+  $("#hooks-pool-info").textContent = `${pool.length} hooks from ${songs.size} songs in the pool · ${unseen} not yet asked`;
+  $("#hooks-start").disabled = pool.length < 1;
+  const first = {}, any = {};
+  const deg = S.labels === "degrees";
+  const cols = deg ? DEG_ORDER.filter(d => d.length === 1 || pool.some(h => h.notes.some(n => n.sd === d))) : INTERVAL_ORDER;
+  for (const h of pool) {
+    const f = deg ? h.firstSd : h.firstInterval; first[f] = (first[f] || 0) + 1;
+    for (const i of new Set(deg ? h.notes.map(n => n.sd) : h.intervals.filter(iv => iv.dir !== "same").map(iv => iv.label))) any[i] = (any[i] || 0) + 1;
+  }
+  $("#hooks-coverage").innerHTML = `<tr><th>${deg ? "Degree" : "Interval"}</th>${cols.map(i => `<th>${deg ? degText(i) : i}</th>`).join("")}</tr>` +
+    `<tr><td class="muted">${deg ? "starts on" : "first move"}</td>${cols.map(i => `<td class="${(first[i] || 0) >= 2 ? "pct-ok" : first[i] ? "pct-mid" : "pct-bad"}">${first[i] || 0}</td>`).join("")}</tr>` +
+    `<tr><td class="muted">anywhere</td>${cols.map(i => `<td>${any[i] || 0}</td>`).join("")}</tr>`;
+  // song checklist: ticked = in S.songs; counts ignore the tick so you can see what a song would contribute
+  const tb = $("#song-list tbody"); tb.innerHTML = "";
+  for (const sName of SONGS) {
+    const hs = DATA.hooks.filter(h => h.song === sName && hookEligibleAnySong(h) && hookInPoolAnySong(h));
+    const cb = el("input", { type: "checkbox" }); cb.checked = S.songs.includes(sName);
+    cb.onchange = () => { S.songs = SONGS.filter(x => x === sName ? cb.checked : S.songs.includes(x)); saveSettings(); refreshHooks(); };
+    tb.append(el("tr", { class: cb.checked ? "" : "bad" },
+      el("td", {}, el("label", { class: "chip" + (cb.checked ? " on" : "") }, cb, sName)),
+      el("td", { class: "muted" }, hs.length ? `${hs.length} hook${hs.length > 1 ? "s" : ""}` : "no hook in pool"),
+      el("td", { class: "ivmini" }, hs.map(h => S.labels === "degrees" ? h.notes.map(n => degText(n.sd)).join(" ") : `${h.firstInterval}${h.firstDir === "up" ? "↑" : "↓"}`).join("  ·  "))));
+  }
+}
+function hookEligibleAnySong(h) { return !h.unavailable && !(S.skipSuspect && h.timing === "suspect") && h.firstInterval; }
+function hookInPoolAnySong(h) { const r = HR[h.id]; return r === "down" ? false : r === "up" ? true : h.phrase < S.phrases && S.hookSections.includes(sectionKind(h.section)); }
+$("#songs-all").onclick = () => { S.songs = SONGS.slice(); saveSettings(); refreshHooks(); };
+$("#songs-none").onclick = () => { S.songs = []; saveSettings(); refreshHooks(); };
+function rateHook(id, r) { if (HR[id] === r) delete HR[id]; else HR[id] = r; saveHR(); refreshHooks(); if (HQ && HQ.hook.id === id) renderHQButtons(); }
+function renderHQButtons() { const r = HR[HQ.hook.id]; $("#hq-up").classList.toggle("up", r === "up"); $("#hq-down").classList.toggle("bad", r === "down"); }
+function startHooks() {
+  if (hookPool().length < 1) return;
+  SESSION = { results: [], n: 0 };
+  $("#hooks-idle").classList.add("hidden"); $("#hooks-done").classList.add("hidden"); $("#hooks-live").classList.remove("hidden");
+  nextHook();
+}
+function pickHook() {
+  // least recently asked first (unseen before seen), ties shuffled; avoid the song we just asked if there's a choice
+  const pool = hookPool().map(h => ({ h, r: Math.random() })).sort((a, b) => (SEEN[a.h.id] || 0) - (SEEN[b.h.id] || 0) || a.r - b.r).map(x => x.h);
+  const last = HQ && HQ.hook.song;
+  return pool.find(h => h.song !== last) || pool[0] || null;
+}
+function nextHook() {
+  const picked = pickHook();
+  if (!picked) { SESSION = null; HQ = null; $("#hooks-live").classList.add("hidden"); $("#hooks-idle").classList.remove("hidden"); updateCover(); return; }
+  SESSION.n++;
+  let h = picked;
+  const mode = S.hookMode === "mixed" ? ["tonic", "interval", "song"][Math.floor(Math.random() * 3)] : S.hookMode;
+  HQ = { hook: h, mode, answered: false, revealed: false, plays: 0, target: undefined };
+  SEEN[h.id] = Date.now(); saveSeen();
+  $("#hq-num").textContent = `Hook #${SESSION.n}`;
+  $("#hq-score").textContent = SESSION.results.length ? `· ${SESSION.results.filter(r => r.correct).length}/${SESSION.results.length} so far` : "";
+  $("#hq-reveal").classList.add("hidden"); $("#hq-next").classList.add("hidden"); $("#hq-up").classList.add("hidden"); $("#hq-down").classList.add("hidden");
+  $("#hq-play-status").textContent = "";
+  const deg = S.labels === "degrees";
+  $("#hq-ivs").innerHTML = "";
+  const a = $("#hq-answers"); a.innerHTML = ""; a.classList.toggle("songs", mode === "song"); a.classList.toggle("keys", mode === "tonic");
+  $("#hq-tone").disabled = mode === "tonic"; $("#hq-drone").disabled = mode === "tonic";
+  if (mode === "tonic") {
+    HQ.sel = null; h = { ...h, long: true };
+    $("#hq-prompt").innerHTML = `Where is home? <span class="muted">Play the hook (<kbd>space</kbd>, as often as you like), then find its tonic on the keyboard. Keys sound when clicked; the highlighted key is your answer.</span>`;
+    const base0 = 12 * Math.floor(Math.min(...h.notes.map(n => n.midi)) / 12) - 12;   // default: the octave below the hook's lowest note
+    const renderKeys = () => {
+      const base = base0 + 12 * S.keyOctave, oct = Math.floor(base / 12) - 1;
+      const keep = {}; document.querySelectorAll("#hq-answers .key").forEach(k => keep[k.dataset.ans] = [...k.classList].filter(c => ["sel", "correct", "wrong", "near"].includes(c)));
+      a.innerHTML = "";
+      PC_NAMES.forEach((name, pc) => a.append(el("button", { class: "btn key" + (name.includes("♯") ? " black" : "") + (keep[pc] ? " " + keep[pc].join(" ") : ""), "data-ans": String(pc), title: `${name}${oct}`, onclick: () => { synthNote(base + pc, 0, 1.1, 0.3); if (HQ.answered) return; stopClip(); HQ.sel = pc; document.querySelectorAll("#hq-answers .key").forEach(k => k.classList.toggle("sel", +k.dataset.ans === pc)); $("#hq-submit").disabled = false; } }, name)));
+      const sub = el("button", { class: "btn primary submit", id: "hq-submit", onclick: () => { if (HQ.sel !== null) answerHook(String(HQ.sel)); } }, "That's home");
+      sub.disabled = HQ.answered || HQ.sel === null; a.append(sub);
+      a.append(el("span", { class: "oct" }, el("button", { class: "tiny", title: "octave down", onclick: () => { S.keyOctave = Math.max(-2, S.keyOctave - 1); saveSettings(); renderKeys(); } }, "8va −"), `C${oct}–B${oct}`, el("button", { class: "tiny", title: "octave up", onclick: () => { S.keyOctave = Math.min(2, S.keyOctave + 1); saveSettings(); renderKeys(); } }, "8va +")));
+    };
+    renderKeys();
+    $("#hq-play").disabled = false; $("#hq-play").title = "";
+  } else if (mode === "song") {
+    $("#hq-prompt").innerHTML = `Which song is this hook from? <span class="muted">${h.n} notes${deg ? ", degrees against the tonic" : ""}. Start from the tone, hear it in your head.</span>`;
+    renderSeq();
+    $("#hq-play").disabled = true; $("#hq-play").title = "plays after you answer";
+    const others = [...new Set(hookPool().map(x => x.song))].filter(s => s !== h.song).sort(() => Math.random() - 0.5);
+    const n = S.hookChoices === "all" ? others.length : +S.hookChoices - 1;
+    const choices = [h.song, ...others.slice(0, n)].sort((x, y) => x.localeCompare(y));
+    for (const sName of choices) a.append(el("button", { class: "btn", "data-ans": sName, onclick: () => answerHook(sName) }, sName));
+  } else {
+    const lyr = hookLyric(h);
+    if (deg) {
+      HQ.target = 0; HQ.guesses = []; HQ.mode = "degrees";
+      renderDegPrompt(); renderSeq(true);
+      const opts = DEG_ORDER.filter(d => d.length === 1 || hookPool().some(x => x.notes.some(n => n.sd === d)));
+      for (const d of opts) a.append(el("button", { class: "btn", "data-ans": d, onclick: () => answerHook(d) }, degText(d)));
+    } else {
+      $("#hq-prompt").innerHTML = `<strong>${h.song}</strong> <span class="muted">· ${h.section}</span>${lyr ? `<span class="lyric">“${lyr}”</span>` : ""}<br><span class="muted">What is the first interval of this hook? First move goes ${h.firstDir === "up" ? "↑ up" : "↓ down"}. Playing it counts as a hint.</span>`;
+      for (const i of INTERVAL_ORDER) a.append(el("button", { class: "btn", "data-ans": i, onclick: () => answerHook(i) }, i));
+    }
+    $("#hq-play").disabled = false; $("#hq-play").title = "";
+  }
+  showClip(HQ.target !== undefined ? { ...h, targetAbs: h.noteIndex + HQ.target } : h, false); updateCover();
+  if (currentVideo !== h.youtubeId && playerReady) { currentVideo = h.youtubeId; player.cueVideoById(h.youtubeId, clipWindow(h).start); }
+  if (S.drone && mode !== "tonic") droneStart(h);
+  if (S.hookAutoTone && mode !== "tonic") startingTone();
+  if (mode === "tonic") setTimeout(() => { if (HQ && HQ.hook.id === h.id && !HQ.revealed) playClip(hookClip(), 1); }, 400);
+}
+function renderDegPrompt() {
+  const h = HQ.hook, lyrH = hookLyricHtml(h, HQ.target);
+  $("#hq-prompt").innerHTML = `<strong>${h.song}</strong> <span class="muted">· ${h.section} · ${h.key.split(" ")[1]} key</span>${lyrH ? `<span class="lyric">“${lyrH}”</span>` : ""}<br><span class="muted">Name each note in turn; a miss keeps you on the note. Now note <strong>${HQ.target + 1}</strong> of ${h.n}: the ? below, highlighted in the strip${lyrH.includes("hit") ? ", bold in the lyric" : ""}. The drone is the tonic; <kbd>t</kbd> plays the current note; keys 1–7 answer. Playing the clip counts as a hint.</span>`;
+}
+function answerHook(ans) {
+  if (HQ.answered) return;
+  const h = HQ.hook;
+  if (HQ.mode === "degrees") {
+    const truth = h.notes[HQ.target].sd;
+    HQ.wrong = HQ.wrong || [];
+    if (ans !== truth) {   // stay on this note; mark the button and remember the miss
+      if (!HQ.wrong.includes(ans)) HQ.wrong.push(ans);
+      const b = document.querySelector(`#hq-answers button[data-ans="${ans}"]`); if (b) { b.classList.add("wrong"); b.disabled = true; }
+      $("#hq-play-status").textContent = `not ${degText(ans)}`;
+      return;
+    }
+    HQ.guesses.push({ truth, wrong: HQ.wrong, correct: HQ.wrong.length === 0 });
+    HQ.wrong = [];
+    document.querySelectorAll("#hq-answers button").forEach(b => { b.classList.remove("wrong"); b.disabled = false; });
+    $("#hq-play-status").textContent = "";
+    if (HQ.target < h.n - 1) {
+      HQ.target++; renderSeq(true); renderDegPrompt();
+      showClip({ ...h, targetAbs: h.noteIndex + HQ.target }, false);
+      return;
+    }
+    HQ.answered = true;
+    const ok = HQ.guesses.filter(g => g.correct).length;
+    SESSION.results.push({ hook: h, mode: "degrees", guesses: HQ.guesses, correct: ok === h.n, ok, n: h.n, plays: HQ.plays });
+    document.querySelectorAll("#hq-answers button").forEach(b => b.disabled = true);
+    revealHook(ok === h.n ? `✓ all ${h.n} notes first try` : `${ok}/${h.n} notes first try`);
+    return;
+  }
+  HQ.answered = true;
+  const truth = HQ.mode === "song" ? h.song : HQ.mode === "tonic" ? String(h.tonic) : h.firstInterval, correct = ans === truth;
+  const near = HQ.mode === "tonic" && !correct && +ans === relativeTonic(h);   // the relative major/minor: yellow, scored apart
+  SESSION.results.push({ hook: h, mode: HQ.mode, guess: ans, correct, near, plays: HQ.plays, truth });
+  document.querySelectorAll("#hq-answers button").forEach(b => { b.disabled = !(HQ.mode === "tonic" && b.classList.contains("key")); b.classList.remove("sel"); if (b.dataset.ans === truth) b.classList.add("correct"); else if (b.dataset.ans === ans) b.classList.add(near ? "near" : "wrong"); });
+  if (HQ.mode === "tonic") { revealHook(correct ? `✓ home is ${PC_NAMES[h.tonic]} (${h.key})` : near ? `~ ${PC_NAMES[+ans]} is the relative ${h.key.includes("minor") ? "major" : "minor"}; Theorytab calls it ${h.key}` : `✗ you said ${PC_NAMES[+ans]}, home is ${PC_NAMES[h.tonic]} (${h.key})`); return; }
+  revealHook(correct ? `✓ ${truth}` : `✗ you said ${ans}, it was ${truth}`);
+}
+function revealHook(headline) {
+  HQ.revealed = true;
+  const h = HQ.hook, s = DATA.sections[h.sectionKey];
+  droneStop(); renderSeq();
+  showClip(HQ.target !== undefined ? { ...h, targetAbs: h.noteIndex + HQ.target } : h, true); updateCover();
+  $("#hq-play").disabled = false;
+  const t = Math.max(0, Math.floor(h.start - 1));
+  $("#hq-reveal").classList.remove("hidden");
+  $("#hq-reveal").innerHTML = `<strong>${headline}</strong> &nbsp;<span class="muted">${h.notes.map(n => n.name).join(" ")} · ${S.labels === "degrees" ? h.intervals.map(iv => iv.dir === "same" ? "·" : iv.label + (iv.dir === "up" ? "↑" : "↓")).join(" ") : h.notes.map(n => degText(n.sd)).join(" ")}</span><br>
+    ${h.song} · ${h.section} · ${h.key} · <a href="https://www.youtube.com/watch?v=${h.youtubeId}&t=${t}s" target="_blank" rel="noopener">${fmtTime(h.start)} on YouTube</a> · <a href="https://www.hooktheory.com/theorytab/view/${s.slug}" target="_blank" rel="noopener">Theorytab</a>${h.timing === "suspect" ? ' <span class="muted">· ⚠ timing suspect</span>' : ""}`;
+  $("#hq-next").classList.remove("hidden"); $("#hq-up").classList.remove("hidden"); $("#hq-down").classList.remove("hidden"); renderHQButtons();
+  if (HQ.mode === "tonic") { stopClip(); synthNote(droneMidi(h) + 12, 0, 1.2, 0.3); setTimeout(() => { if (HQ && HQ.hook.id === h.id) playClip(hookClip(), 1); }, 1100); }
+  else playClip(h, 1);
+}
+function finishHooks() {
+  droneStop(); $("#hooks-live").classList.add("hidden"); $("#hooks-done").classList.remove("hidden"); updateCover();
+  const R = SESSION.results, song = R.filter(r => r.mode === "song"), ivq = R.filter(r => r.mode === "interval"), dq = R.filter(r => r.mode === "degrees"), tq = R.filter(r => r.mode === "tonic");
+  const ORDER = [...DEG_ORDER.map(degText), ...INTERVAL_ORDER];
+  const per = {};
+  for (const r of ivq) { const p = per[r.hook.firstInterval] ||= { n: 0, ok: 0 }; p.n++; p.ok += r.correct ? 1 : 0; }
+  for (const r of dq) for (const g of r.guesses) { const p = per[degText(g.truth)] ||= { n: 0, ok: 0 }; p.n++; p.ok += g.correct ? 1 : 0; }
+  const notes = dq.reduce((a, r) => a + r.n, 0), notesOk = dq.reduce((a, r) => a + r.ok, 0), hooksOk = dq.filter(r => r.correct).length;
+  const row = (label, ok, n) => n ? `<tr><td>${label}</td><td>${ok}/${n}</td><td class="${100 * ok / n >= 80 ? "pct-ok" : 100 * ok / n >= 60 ? "pct-mid" : "pct-bad"}">${Math.round(100 * ok / n)}%</td></tr>` : "";
+  const tNear = tq.filter(r => r.near).length;
+  $("#hooks-summary").innerHTML = `<tr><th>Mode</th><th>Right</th><th>%</th></tr>` + row("find the tonic", tq.filter(r => r.correct).length, tq.length) + (tNear ? `<tr><td class="muted">&nbsp;&nbsp;relative major/minor</td><td class="pct-mid">${tNear}</td><td></td></tr>` : "") + row("name the song", song.filter(r => r.correct).length, song.length) + row("name the degrees · notes first try", notesOk, notes) + row("name the degrees · whole hooks", hooksOk, dq.length) + row("name the interval", ivq.filter(r => r.correct).length, ivq.length) +
+    ORDER.filter(i => per[i]).map(i => row(`&nbsp;&nbsp;${i}`, per[i].ok, per[i].n)).join("");
+  const title = (r) => r.hook.song.split(" – ")[1];
+  const misses = R.filter(r => !r.correct).map(r => r.mode === "tonic" ? `${title(r)}: ${PC_NAMES[+r.guess]}→${PC_NAMES[+r.truth]}${r.near ? " (relative)" : ""}` : r.mode === "song" ? `${title(r)}→${(r.guess || "?").split(" – ")[1] || r.guess}` : r.mode === "degrees" ? `${title(r)}: ${r.guesses.map(g => g.correct ? degText(g.truth) : `${g.wrong.map(degText).join(",")}→${degText(g.truth)}`).join(" ")}` : `${r.hook.firstInterval}→${r.guess} (${title(r)})`);
+  $("#hooks-results-text").textContent = `hooks result — ${new Date().toISOString().slice(0, 10)}: ` +
+    [tq.length ? `tonic ${tq.filter(r => r.correct).length}/${tq.length}${tNear ? ` (+${tNear} relative)` : ""}` : "", song.length ? `song ${song.filter(r => r.correct).length}/${song.length}` : "", dq.length ? `degrees ${notesOk}/${notes} notes, ${hooksOk}/${dq.length} hooks (${DEG_ORDER.map(degText).filter(i => per[i]).map(i => `${i} ${per[i].ok}/${per[i].n}`).join(", ")})` : "", ivq.length ? `interval ${ivq.filter(r => r.correct).length}/${ivq.length} (${INTERVAL_ORDER.filter(i => per[i]).map(i => `${i} ${per[i].ok}/${per[i].n}`).join(", ")})` : ""].filter(Boolean).join(", ") +
+    (misses.length ? `\nmisses: ${misses.join("; ")}` : "") + `\nasked ${R.length} · pool ${hookPool().length} hooks, sections=${S.hookSections.join("+")}, labels=${S.labels}, drone=${S.drone ? "on" : "off"}, choices=${S.hookChoices}`;
+  SESSION = null; HQ = null; refreshHooks();
+}
+$("#hooks-start").onclick = startHooks; $("#hooks-again").onclick = startHooks;
+$("#hooks-end-early").onclick = () => { droneStop(); stopClip(); if (SESSION && SESSION.results.length) finishHooks(); else { SESSION = null; HQ = null; $("#hooks-live").classList.add("hidden"); $("#hooks-idle").classList.remove("hidden"); updateCover(); refreshHooks(); } };
+function hookClip() { const h = HQ.hook; return HQ.mode === "tonic" ? { ...h, long: true, targetAbs: h.targetAbs } : HQ.target !== undefined ? { ...h, targetAbs: h.noteIndex + HQ.target } : h; }
+$("#hq-play").onclick = () => { if (!HQ || $("#hq-play").disabled) return; if (!HQ.revealed) { HQ.plays++; if (HQ.mode !== "tonic") $("#hq-play-status").textContent = "hint used"; } playClip(hookClip(), 1); };
+function startingTone() { if (!HQ) return; stopClip(); synthNote(HQ.hook.notes[HQ.target ?? 0].midi, 0.05, 1.2, 0.3); }
+$("#hq-tone").onclick = startingTone;
+$("#hq-next").onclick = () => { stopClip(); droneStop(); nextHook(); };
+$("#hq-drone").onclick = () => { if (!HQ || HQ.revealed) return; DRONE ? droneStop() : droneStart(HQ.hook); };
+$("#hq-up").onclick = () => rateHook(HQ.hook.id, "up");
+$("#hq-down").onclick = () => rateHook(HQ.hook.id, "down");
+$("#hooks-copy-results").onclick = () => navigator.clipboard.writeText($("#hooks-results-text").textContent).then(() => $("#hooks-copy-results").textContent = "Copied");
+document.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT" || !HQ) return;
+  if (e.code === "Space") { e.preventDefault(); $("#hq-play").click(); }
+  if (e.key === "t" || e.key === "T") { e.preventDefault(); startingTone(); }
+  if (HQ.mode === "degrees" && !HQ.answered && /^[1-7]$/.test(e.key)) { e.preventDefault(); answerHook(e.key); }
+  if (e.key === "d" || e.key === "D") { e.preventDefault(); $("#hq-drone").click(); }
+  if (e.key === "Enter" && HQ.revealed) { e.preventDefault(); $("#hq-next").click(); }
+});
+</script>
+</body>
+</html>
