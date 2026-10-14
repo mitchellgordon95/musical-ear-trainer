@@ -91,7 +91,8 @@
   .answers.keys button.key.black { background:#0b0d12; color:var(--dim); padding-top:10px; padding-bottom:20px; }
   .answers.keys button.key.sel { border-color:var(--acc); box-shadow:0 0 0 2px var(--acc) inset; color:var(--fg); }
   .answers.keys button.submit { margin-left:12px; }
-  .answers.keys .oct { display:flex; align-items:center; gap:4px; margin-left:12px; color:var(--dim); font-size:13px; }
+  .answers .oct { display:flex; align-items:center; gap:4px; margin-left:12px; color:var(--dim); font-size:13px; grid-column:1 / -1; }
+  .answers .oct button { padding:3px 8px; font-size:13px; font-weight:500; }
   .answers.keys button.key.correct, .answers.keys button.key.black.correct { background:var(--ok); color:#06261a; border-color:var(--ok); }
   .answers.keys button.key.wrong, .answers.keys button.key.black.wrong { background:var(--bad); color:#2b0a0a; border-color:var(--bad); }
   .answers.keys button.key.near, .answers.keys button.key.black.near { background:var(--warn); color:#3a2500; border-color:var(--warn); }
@@ -238,7 +239,7 @@ let DATA = null, SONGS = [];
 const SONGS_OFF_BY_DEFAULT = ["Kenshi Yonezu – KICK BACK", "Kenshi Yonezu – Lemon", "YOASOBI – Idol"];   // anime-list songs, unticked unless you tick them
 const S = loadSettings();
 function loadSettings() {
-  const d = { padBefore: 0.15, padAfter: 0.25, viz: "pop", showLyrics: true, skipSuspect: true, songs: null, songsSeen: [], hookMode: "song", hookChoices: "4", hookSections: ["Chorus"], labels: "degrees", drone: true, strip: true, tonicChords: 4, synthVol: 1, keyOctave: 0, settingsOpen: false };
+  const d = { padBefore: 0.15, padAfter: 0.25, viz: "pop", showLyrics: true, skipSuspect: true, songs: null, songsSeen: [], hookMode: "song", hookChoices: "4", hookSections: ["Chorus"], labels: "degrees", drone: true, strip: true, tonicChords: 4, synthVol: 1, keyOctave: 0, degOctave: 0, settingsOpen: false };
   try { return Object.assign(d, JSON.parse(localStorage.getItem("it-settings") || "{}")); } catch { return d; }
 }
 function saveSettings() { try { localStorage.setItem("it-settings", JSON.stringify(S)); } catch {} }
@@ -458,6 +459,14 @@ const DEG_ORDER = ["1", "#1", "b2", "2", "#2", "b3", "3", "4", "#4", "b5", "5", 
 const PC_NAMES = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"];
 const relativeTonic = (h) => (h.tonic + (h.key.includes("minor") ? 3 : 9)) % 12;   // the relative major's / minor's tonic
 const degText = (sd) => sd.replace("b", "♭").replace("#", "♯");
+const SCALES = { major: [0, 2, 4, 5, 7, 9, 11], minor: [0, 2, 3, 5, 7, 8, 10], harmonicMinor: [0, 2, 3, 5, 7, 8, 11], dorian: [0, 2, 3, 5, 7, 9, 10], mixolydian: [0, 2, 4, 5, 7, 9, 10], phrygian: [0, 1, 3, 5, 7, 8, 10], phrygianDominant: [0, 1, 4, 5, 7, 8, 10] };   // semitones above the tonic per Theorytab key mode; degrees are mode-relative (minor "3" is the minor third)
+function degSemis(h, sd) { const sc = SCALES[h.key.split(" ")[1]] || SCALES[h.key.includes("minor") ? "minor" : "major"]; return sc[+sd.replace(/[#b]/g, "") - 1] + (sd.split("#").length - 1) - (sd.split("b").length - 1); }
+function degTonic(h) {   // the tonic whose octave [T, T+12) holds the most hook notes, so the degree buttons mostly play the hook's own pitches; S.degOctave shifts it
+  const ms = h.notes.map(n => n.midi), lo = Math.min(...ms) - 11;
+  let best = lo, bestN = -1;
+  for (let T = lo + ((h.tonic - lo) % 12 + 12) % 12; T <= Math.max(...ms); T += 12) { const n = ms.filter(m => m >= T && m < T + 12).length; if (n > bestN) { best = T; bestN = n; } }
+  return best + 12 * S.degOctave;
+}
 
 // ---------- hooks: degrees/intervals -> name the song, song -> name the first degree/interval ----------
 let SESSION = null, HQ = null, SECTION_KINDS = [];   // SESSION = { results, n }: an endless stream of hooks until Stop
@@ -616,7 +625,14 @@ function nextHook() {
       HQ.target = 0; HQ.guesses = []; HQ.mode = "degrees";
       renderDegPrompt(); renderSeq(true);
       const opts = DEG_ORDER.filter(d => d.length === 1 || hookPool().some(x => x.notes.some(n => n.sd === d)));
-      for (const d of opts) a.append(el("button", { class: "btn", "data-ans": d, onclick: () => answerHook(d) }, degText(d)));
+      const renderDegs = () => {   // buttons sound their degree over the tonic (and keep sounding after the hook is answered); 8va shifts the octave
+        const T = degTonic(h);
+        const keep = {}; document.querySelectorAll("#hq-answers button[data-ans]").forEach(b => keep[b.dataset.ans] = b.classList.contains("wrong"));
+        a.innerHTML = "";
+        for (const d of opts) a.append(el("button", { class: "btn" + (keep[d] ? " wrong" : ""), "data-ans": d, onclick: () => { synthNote(T + degSemis(h, d), 0, 1.1, 0.3); if (HQ.answered) return; stopClip(); answerHook(d); } }, degText(d)));
+        a.append(el("span", { class: "oct" }, el("button", { class: "tiny", title: "octave down", onclick: () => { S.degOctave = Math.max(-2, S.degOctave - 1); saveSettings(); renderDegs(); } }, "8va −"), `1 = ${PC_NAMES[h.tonic]}${Math.floor(T / 12) - 1}`, el("button", { class: "tiny", title: "octave up", onclick: () => { S.degOctave = Math.min(2, S.degOctave + 1); saveSettings(); renderDegs(); } }, "8va +")));
+      };
+      renderDegs();
     } else {
       $("#hq-prompt").innerHTML = `<strong>${h.song}</strong> <span class="muted">· ${h.section}</span>${lyr ? `<span class="lyric">“${lyr}”</span>` : ""}<br><span class="muted">What is the first interval of this hook? First move goes ${h.firstDir === "up" ? "↑ up" : "↓ down"}. Playing it counts as a hint.</span>`;
       for (const i of INTERVAL_ORDER) a.append(el("button", { class: "btn", "data-ans": i, onclick: () => answerHook(i) }, i));
@@ -630,7 +646,7 @@ function nextHook() {
 }
 function renderDegPrompt() {
   const h = HQ.hook, lyrH = hookLyricHtml(h, HQ.target);
-  $("#hq-prompt").innerHTML = `<strong>${h.song}</strong> <span class="muted">· ${h.section} · ${h.key.split(" ")[1]} key</span>${lyrH ? `<span class="lyric">“${lyrH}”</span>` : ""}<br><span class="muted">Name each note in turn; a miss keeps you on the note. Now note <strong>${HQ.target + 1}</strong> of ${h.n}: the ? below, highlighted in the strip${lyrH.includes("hit") ? ", bold in the lyric" : ""}. The drone is the tonic; <kbd>c</kbd> plays a progression in the key; <kbd>t</kbd> plays the current note; keys 1–7 answer. Playing the clip counts as a hint.</span>`;
+  $("#hq-prompt").innerHTML = `<strong>${h.song}</strong> <span class="muted">· ${h.section} · ${h.key.split(" ")[1]} key</span>${lyrH ? `<span class="lyric">“${lyrH}”</span>` : ""}<br><span class="muted">Name each note in turn; a miss keeps you on the note. Now note <strong>${HQ.target + 1}</strong> of ${h.n}: the ? below, highlighted in the strip${lyrH.includes("hit") ? ", bold in the lyric" : ""}. The drone is the tonic; <kbd>c</kbd> plays a progression in the key; <kbd>t</kbd> plays the current note; the degree buttons (keys 1–7) sound their note and answer. Playing the clip counts as a hint.</span>`;
 }
 function answerHook(ans) {
   if (HQ.answered) return;
@@ -640,13 +656,13 @@ function answerHook(ans) {
     HQ.wrong = HQ.wrong || [];
     if (ans !== truth) {   // stay on this note; mark the button and remember the miss
       if (!HQ.wrong.includes(ans)) HQ.wrong.push(ans);
-      const b = document.querySelector(`#hq-answers button[data-ans="${ans}"]`); if (b) { b.classList.add("wrong"); b.disabled = true; }
+      const b = document.querySelector(`#hq-answers button[data-ans="${ans}"]`); if (b) b.classList.add("wrong");   // stays clickable: it still sounds, for comparing with the target
       $("#hq-play-status").textContent = `not ${degText(ans)}`;
       return;
     }
     HQ.guesses.push({ truth, wrong: HQ.wrong, correct: HQ.wrong.length === 0 });
     HQ.wrong = [];
-    document.querySelectorAll("#hq-answers button").forEach(b => { b.classList.remove("wrong"); b.disabled = false; });
+    document.querySelectorAll("#hq-answers button").forEach(b => b.classList.remove("wrong"));
     $("#hq-play-status").textContent = "";
     if (HQ.target < h.n - 1) {
       HQ.target++; renderSeq(true); renderDegPrompt();
@@ -655,8 +671,7 @@ function answerHook(ans) {
     }
     HQ.answered = true;
     const ok = HQ.guesses.filter(g => g.correct).length;
-    SESSION.results.push({ hook: h, mode: "degrees", guesses: HQ.guesses, correct: ok === h.n, ok, n: h.n, plays: HQ.plays });
-    document.querySelectorAll("#hq-answers button").forEach(b => b.disabled = true);
+    SESSION.results.push({ hook: h, mode: "degrees", guesses: HQ.guesses, correct: ok === h.n, ok, n: h.n, plays: HQ.plays });   // the buttons stay live: they still sound
     revealHook(ok === h.n ? `✓ all ${h.n} notes first try` : `${ok}/${h.n} notes first try`);
     return;
   }
@@ -719,7 +734,7 @@ document.addEventListener("keydown", (e) => {
   if (e.code === "Space") { e.preventDefault(); $("#hq-play").click(); }
   if (e.key === "t" || e.key === "T") { e.preventDefault(); startingTone(); }
   if (e.key === "c" || e.key === "C") { e.preventDefault(); $("#hq-prog").click(); }
-  if (HQ.mode === "degrees" && !HQ.answered && /^[1-7]$/.test(e.key)) { e.preventDefault(); answerHook(e.key); }
+  if (HQ.mode === "degrees" && /^[1-7]$/.test(e.key)) { e.preventDefault(); const b = document.querySelector(`#hq-answers button[data-ans="${e.key}"]`); if (b) b.click(); }
   if (e.key === "d" || e.key === "D") { e.preventDefault(); $("#hq-drone").click(); }
   if (e.key === "Enter" && HQ.revealed) { e.preventDefault(); $("#hq-next").click(); }
 });
