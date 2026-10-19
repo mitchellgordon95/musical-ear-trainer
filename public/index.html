@@ -161,6 +161,7 @@
           <div class="ivseq" id="hq-ivs"></div>
           <div class="row">
             <button class="btn" id="hq-play">▶ Play hook</button>
+            <button class="btn" id="hq-section" title="Replays the whole section the hook is in, to re-establish the key (not a hint)">▶ Section <kbd>s</kbd></button>
             <button class="btn" id="hq-tone" title="Plays the note you're naming (the ?) on a synth: its pitch, not its degree">♪ This note <kbd>t</kbd></button>
             <button class="btn" id="hq-prog" title="A chord progression in the hook's key, ending on home, to set the tonal centre">♫ <span id="hq-prog-name">I–V–vi–IV–I</span> <kbd>c</kbd></button>
             <button class="tiny" id="hq-drone" title="Tonic drone on/off"><kbd>d</kbd> drone</button>
@@ -204,8 +205,6 @@
         <label class="small">Name-the-song choices</label>
         <select id="hook-choices"><option>4</option><option>6</option><option>8</option><option value="all">all songs</option></select>
       </div>
-      <div class="row"><label class="small">Sections in the pool</label></div>
-      <div class="chips" id="hook-section-chips"></div>
       <div class="row">
         <label class="small">Visualizer</label>
         <select id="viz"><option value="pop">pop on each note</option><option value="slider">smooth slider</option><option value="both">both</option></select>
@@ -213,14 +212,6 @@
       <div class="row">
         <label class="small">Synth volume (keys, note, chords, drone) <span id="synth-vol-val"></span></label>
         <input type="range" id="synth-vol" min="0" max="1.5" step="0.05">
-      </div>
-      <div class="row">
-        <label class="small">Find-the-tonic clip: chord changes</label>
-        <input type="number" id="tonic-chords" min="1" max="12" step="1" style="width:60px">
-      </div>
-      <div class="row">
-        <label class="small">Hook clip runs on after the hook</label>
-        <select id="clip-tail"><option value="0">not at all (half a beat)</option><option value="1">one more chord</option><option value="2">two more chords</option><option value="section">to the end of the section</option></select>
       </div>
       <div class="row">
         <label class="small">Labels</label>
@@ -243,7 +234,7 @@ let DATA = null, SONGS = [];
 const SONGS_OFF_BY_DEFAULT = ["Kenshi Yonezu – KICK BACK", "Kenshi Yonezu – Lemon", "YOASOBI – Idol"];   // anime-list songs, unticked unless you tick them
 const S = loadSettings();
 function loadSettings() {
-  const d = { padBefore: 0.15, padAfter: 0.25, viz: "pop", showLyrics: true, skipSuspect: true, songs: null, songsSeen: [], hookMode: "song", hookChoices: "4", hookSections: ["Chorus"], labels: "degrees", drone: true, strip: true, tonicChords: 4, clipTail: "2", synthVol: 1, keyOctave: 0, degOctave: 0, settingsOpen: false };
+  const d = { padBefore: 0.15, padAfter: 0.25, viz: "pop", showLyrics: true, skipSuspect: true, songs: null, songsSeen: [], hookMode: "song", hookChoices: "4", labels: "degrees", drone: true, strip: true, synthVol: 1, keyOctave: 0, degOctave: 0, settingsOpen: false };
   try { return Object.assign(d, JSON.parse(localStorage.getItem("it-settings") || "{}")); } catch { return d; }
 }
 function saveSettings() { try { localStorage.setItem("it-settings", JSON.stringify(S)); } catch {} }
@@ -280,8 +271,6 @@ function buildSettings() {
   $("#viz").value = S.viz; $("#viz").onchange = e => { S.viz = e.target.value; saveSettings(); renderTimeline(); };
   $("#synth-vol").value = S.synthVol; $("#synth-vol-val").textContent = Math.round(S.synthVol * 100) + "%";
   $("#synth-vol").oninput = e => { S.synthVol = +e.target.value; $("#synth-vol-val").textContent = Math.round(S.synthVol * 100) + "%"; saveSettings(); if (DRONE) DRONE.out.gain.setTargetAtTime(0.11 * Math.max(0.001, S.synthVol), actx.currentTime, 0.05); };
-  $("#tonic-chords").value = S.tonicChords; $("#tonic-chords").onchange = e => { S.tonicChords = Math.max(1, +e.target.value || 4); saveSettings(); };
-  $("#clip-tail").value = S.clipTail; $("#clip-tail").onchange = e => { S.clipTail = e.target.value; saveSettings(); if (HQ) showClip(hookClip(), HQ.revealed); };
   $("#strip").checked = S.strip; $("#strip-wrap").classList.toggle("on", S.strip); $("#timeline").classList.toggle("hidden", !S.strip);
   $("#strip").onchange = e => { S.strip = e.target.checked; $("#strip-wrap").classList.toggle("on", S.strip); $("#timeline").classList.toggle("hidden", !S.strip); saveSettings(); };
   $("#show-lyrics").checked = S.showLyrics; $("#show-lyrics-wrap").classList.toggle("on", S.showLyrics);
@@ -309,31 +298,32 @@ window.onYouTubeIframeAPIReady = () => {
     },
   });
 };
-function playClip(c, rate = 1) {
-  if (!playerReady) { $("#video-status").textContent = "player not ready yet"; return; }
+function playClip(c, rate = 1, onDone = null) {   // onDone runs once when the clip reaches its end (not when it is stopped)
+  if (!playerReady) { $("#video-status").textContent = "player not ready yet"; return false; }
   stopClip();
   const { start, end } = clipWindow(c);
-  showClip(SHOWN && SHOWN.clip.id === c.id ? SHOWN.clip : c, !(HQ && !HQ.revealed));
+  showClip(SHOWN && SHOWN.clip.id === c.id ? { ...SHOWN.clip, whole: c.whole } : c, !(HQ && !HQ.revealed));
   const go = () => {
     player.setPlaybackRate(rate);
     player.seekTo(start, true); player.playVideo();
-    clipEnd = end; clipStart = start;
+    clipEnd = end; clipStart = start; clipDone = onDone;
     $("#video-status").textContent = `${c.song} · ${c.section} · ${fmtTime(start)} → ${(end - start).toFixed(2)}s @${rate}x · target at ${(c.onsetA - start).toFixed(1)}s`;
   };
   if (currentVideo !== c.youtubeId) { currentVideo = c.youtubeId; pendingPlay = go; player.cueVideoById(c.youtubeId, start); }
   else go();
+  return true;
 }
-let clipEnd = 0, clipStart = 0;
+let clipEnd = 0, clipStart = 0, clipDone = null;
 function watchStop() {
   clearInterval(stopTimer);
   stopTimer = setInterval(() => {
     if (!player || !clipEnd) return;
     const t = player.getCurrentTime();
     movePlayhead(t);
-    if (t >= clipEnd) { player.pauseVideo(); clearInterval(stopTimer); clipEnd = 0; document.querySelectorAll("#timeline .note.sounding").forEach(b => b.classList.remove("sounding")); }
+    if (t >= clipEnd) { player.pauseVideo(); clearInterval(stopTimer); clipEnd = 0; document.querySelectorAll("#timeline .note.sounding").forEach(b => b.classList.remove("sounding")); const f = clipDone; clipDone = null; if (f) f(); }
   }, 16);
 }
-function stopClip() { clearInterval(stopTimer); clipEnd = 0; pendingPlay = null; if (playerReady && player.getPlayerState && player.getPlayerState() === 1) player.pauseVideo(); }
+function stopClip() { clearInterval(stopTimer); clipEnd = 0; clipDone = null; pendingPlay = null; if (playerReady && player.getPlayerState && player.getPlayerState() === 1) player.pauseVideo(); }
 
 // ---------- context window, timeline, lyrics ----------
 let SHOWN = null; // {clip, win, revealed}
@@ -343,26 +333,17 @@ function chordChanges(s) {   // onsets of the section's chord *changes*: a repea
   return { onsets, lastOff: ch.length ? ch[ch.length - 1].off : null };
 }
 function clipWindow(c) {
-  const s = DATA.sections[c.sectionKey], spb = s.secPerBeat || 0.5, { onsets, lastOff } = chordChanges(s);
-  if (c.long) {   // find-the-tonic: start on the chord the hook begins in, run through S.tonicChords chord changes
-    const inChord = onsets.filter(x => x <= c.onsetA + 0.05).pop();
-    const start = Math.max(0, Math.max(inChord ?? -1, c.onsetA - 2 * spb) - S.padBefore);
-    const after = onsets.filter(x => x > c.onsetA + 0.05);
-    const nth = after[S.tonicChords - 1];
-    const last = lastOff ?? c.end;
-    const target = nth !== undefined ? Math.max(nth + 0.25, start + 8) : last;   // through N changes, and at least 8 s (fast-changing songs)
-    const end = Math.max(c.end + 0.5 * spb, Math.min(target, last + 0.3, start + 30)) + S.padAfter;
-    return { start, end };
+  // Two windows (2026-10-19, Mitchell): c.whole = the entire Theorytab section (find-the-tonic's question; name-the-degrees plays
+  // it first to establish the key); otherwise the hook: half a beat before its first note, and on to the end of the chord its last
+  // note falls in (the 8-note cap often chops a phrase mid-chord, which sounded "a little bit short"), never less than half a beat after.
+  const s = DATA.sections[c.sectionKey], spb = s.secPerBeat || 0.5, { onsets, lastOff } = chordChanges(s), notes = s.notes || [];
+  if (c.whole) {
+    const first = Math.min(...[onsets[0], notes[0]?.on].filter(x => x !== undefined)), last = Math.max(...[lastOff, notes[notes.length - 1]?.off].filter(x => x !== null && x !== undefined));
+    return { start: Math.max(0, first - S.padBefore), end: last + S.padAfter };
   }
-  // Hook clips: half a beat before the first note; after the last note, run on per S.clipTail (2026-10-19, "always just a little
-  // bit short"): "0" stops half a beat after the hook, "1"/"2" finish the chord the hook ends in plus that many more whole chords
-  // (stopping just before the following change), "section" runs to the section's last chord. Never shorter than the hook itself.
   const start = Math.max(0, c.onsetA - 0.5 * spb - S.padBefore), hookEnd = c.end + 0.5 * spb + S.padAfter;
-  if (S.clipTail === "0" || lastOff === null) return { start, end: hookEnd };
-  const after = onsets.filter(x => x > c.end - 0.05);   // ends of the chord the hook ends in, and of each chord after it
-  const n = S.clipTail === "section" ? Infinity : +S.clipTail;
-  const stop = after[n] !== undefined ? after[n] - 0.05 : lastOff + 0.3;
-  return { start, end: Math.max(hookEnd, Math.min(stop, start + 60)) };
+  const chordEnd = onsets.find(x => x > c.end - 0.05);   // the change that ends the chord the hook ends in
+  return { start, end: Math.max(hookEnd, Math.min((chordEnd !== undefined ? chordEnd : (lastOff ?? 0) + 0.3) - 0.05, start + 30)) };
 }
 function showClip(c, revealed = true) {
   const win = clipWindow(c);
@@ -485,19 +466,24 @@ function degTonic(h) {   // the tonic whose octave [T, T+12) holds the most hook
 }
 
 // ---------- hooks: degrees/intervals -> name the song, song -> name the first degree/interval ----------
-let SESSION = null, HQ = null, SECTION_KINDS = [];   // SESSION = { results, n }: an endless stream of hooks until Stop
+let SESSION = null, HQ = null;   // SESSION = { results, n }: an endless stream of hooks until Stop
 const sectionKind = (name) => name.replace(/\s*\d+$/, "");   // "Chorus 2" -> "Chorus"
+// Which sections feed which exercise (2026-10-19, Mitchell): find-the-tonic and name-the-degrees take the first phrase of *any*
+// section (verse, chorus, whatever); name-the-song only ever asks real hooks, i.e. chorus first phrases. "any" = the union (mixed, idle counts).
+const MODES = ["tonic", "interval", "song"];
+const poolMode = () => S.hookMode === "mixed" ? "any" : S.hookMode;
+const sectionOk = (h, mode) => mode === "song" ? sectionKind(h.section) === "Chorus" : true;
 function hookEligible(h) {
   return !h.unavailable && !(S.skipSuspect && h.timing === "suspect") && S.songs.includes(h.song) && h.firstInterval;
 }
-function hookInPool(h) {
-  if (!hookEligible(h)) return false;
+function hookInPool(h, mode = poolMode()) {
+  if (!hookEligible(h) || !sectionOk(h, mode)) return false;
   const r = HR[h.id];
   if (r === "down") return false;
   if (r === "up") return true;
-  return h.phrase === 0 && S.hookSections.includes(sectionKind(h.section));   // the first phrase of a section is its hook; 👍 pins any other
+  return h.phrase === 0;   // the first phrase of a section is its hook; 👍 pins any other
 }
-function hookPool() { return DATA ? DATA.hooks.filter(hookInPool) : []; }
+function hookPool(mode = poolMode()) { return DATA ? DATA.hooks.filter(h => hookInPool(h, mode)) : []; }
 function ivChip(iv, i, firstIdx) {
   const same = iv.dir === "same";
   return el("span", { class: "iv " + iv.dir + (i === firstIdx ? " first" : ""), title: same ? "repeated note" : `${iv.semis > 0 ? "+" : ""}${iv.semis} semitones` }, same ? "·" : `${iv.label}${iv.dir === "up" ? "↑" : "↓"}`);
@@ -543,15 +529,7 @@ function hookLyricHtml(h, k) {
   return out.join(" / ");
 }
 function buildHooks() {
-  SECTION_KINDS = [...new Set(Object.values(DATA.sections).map(s => sectionKind(s.section)))].sort((a, b) => DATA.hooks.filter(h => sectionKind(h.section) === b).length - DATA.hooks.filter(h => sectionKind(h.section) === a).length);
-  const sc = $("#hook-section-chips"); sc.innerHTML = "";
-  for (const k of SECTION_KINDS) {
-    const cb = el("input", { type: "checkbox" }); cb.checked = S.hookSections.includes(k);
-    const chip = el("label", { class: "chip" + (cb.checked ? " on" : "") }, cb, k);
-    cb.addEventListener("change", () => { S.hookSections = SECTION_KINDS.filter(x => x === k ? cb.checked : S.hookSections.includes(x)); chip.classList.toggle("on", cb.checked); saveSettings(); refreshHooks(); });
-    sc.append(chip);
-  }
-  $("#hook-mode").value = S.hookMode; $("#hook-mode").onchange = e => { S.hookMode = e.target.value; saveSettings(); };
+  $("#hook-mode").value = S.hookMode; $("#hook-mode").onchange = e => { S.hookMode = e.target.value; saveSettings(); refreshHooks(); };
   $("#hook-choices").value = S.hookChoices; $("#hook-choices").onchange = e => { S.hookChoices = e.target.value; saveSettings(); };
   Promise.all([...new Set(DATA.hooks.filter(hookEligible).map(h => h.youtubeId))].map(loadLyrics)).then(refreshHooks);
   refreshHooks();
@@ -561,7 +539,7 @@ function refreshHooks() {
   const pool = hookPool();
   const songs = new Set(pool.map(h => h.song));
   const unseen = pool.filter(h => !SEEN[h.id]).length;
-  $("#hooks-pool-info").textContent = `${pool.length} hooks from ${songs.size} songs in the pool · ${unseen} not yet asked`;
+  $("#hooks-pool-info").textContent = `${pool.length} ${poolMode() === "song" ? "chorus hooks" : "hooks (first phrase of every section)"} from ${songs.size} songs in the pool · ${unseen} not yet asked`;
   $("#hooks-start").disabled = pool.length < 1;
   // song checklist: ticked = in S.songs; counts ignore the tick so you can see what a song would contribute
   const tb = $("#song-list tbody"); tb.innerHTML = "";
@@ -576,7 +554,7 @@ function refreshHooks() {
   }
 }
 function hookEligibleAnySong(h) { return !h.unavailable && !(S.skipSuspect && h.timing === "suspect") && h.firstInterval; }
-function hookInPoolAnySong(h) { const r = HR[h.id]; return r === "down" ? false : r === "up" ? true : h.phrase === 0 && S.hookSections.includes(sectionKind(h.section)); }
+function hookInPoolAnySong(h) { if (!sectionOk(h, poolMode())) return false; const r = HR[h.id]; return r === "down" ? false : r === "up" ? true : h.phrase === 0; }
 $("#songs-all").onclick = () => { S.songs = SONGS.slice(); saveSettings(); refreshHooks(); };
 $("#songs-none").onclick = () => { S.songs = []; saveSettings(); refreshHooks(); };
 function rateHook(id, r) { if (HR[id] === r) delete HR[id]; else HR[id] = r; saveHR(); refreshHooks(); if (HQ && HQ.hook.id === id) renderHQButtons(); }
@@ -587,18 +565,19 @@ function startHooks() {
   $("#hooks-idle").classList.add("hidden"); $("#hooks-done").classList.add("hidden"); $("#hooks-live").classList.remove("hidden");
   nextHook();
 }
-function pickHook() {
+function pickHook(mode) {
   // least recently asked first (unseen before seen), ties shuffled; avoid the song we just asked if there's a choice
-  const pool = hookPool().map(h => ({ h, r: Math.random() })).sort((a, b) => (SEEN[a.h.id] || 0) - (SEEN[b.h.id] || 0) || a.r - b.r).map(x => x.h);
+  const pool = hookPool(mode).map(h => ({ h, r: Math.random() })).sort((a, b) => (SEEN[a.h.id] || 0) - (SEEN[b.h.id] || 0) || a.r - b.r).map(x => x.h);
   const last = HQ && HQ.hook.song;
   return pool.find(h => h.song !== last) || pool[0] || null;
 }
 function nextHook() {
-  const picked = pickHook();
+  let mode = S.hookMode === "mixed" ? MODES[Math.floor(Math.random() * 3)] : S.hookMode;
+  let picked = pickHook(mode);
+  if (!picked && S.hookMode === "mixed") for (const m of MODES) if ((picked = pickHook(m))) { mode = m; break; }   // an exercise with an empty pool: fall through to another
   if (!picked) { SESSION = null; HQ = null; $("#hooks-live").classList.add("hidden"); $("#hooks-idle").classList.remove("hidden"); updateCover(); return; }
   SESSION.n++;
   let h = picked;
-  const mode = S.hookMode === "mixed" ? ["tonic", "interval", "song"][Math.floor(Math.random() * 3)] : S.hookMode;
   HQ = { hook: h, mode, answered: false, revealed: false, plays: 0, target: undefined };
   SEEN[h.id] = Date.now(); saveSeen();
   $("#hq-num").textContent = `Hook #${SESSION.n}`;
@@ -610,11 +589,11 @@ function nextHook() {
   const a = $("#hq-answers"); a.innerHTML = ""; a.classList.toggle("songs", mode === "song"); a.classList.toggle("keys", mode === "tonic");
   // each exercise gets its own tools: tonic and song are bare (the clip / your head is the reference); degrees get the note, the progression and the drone
   const tools = mode === "interval";
-  for (const b of ["#hq-tone", "#hq-prog", "#hq-drone"]) $(b).classList.toggle("hidden", !tools);
+  for (const b of ["#hq-tone", "#hq-prog", "#hq-drone", "#hq-section"]) $(b).classList.toggle("hidden", !tools);
   $("#hq-prog-name").textContent = progressionFor(h).name;
   if (mode === "tonic") {
-    HQ.sel = null; h = { ...h, long: true };
-    $("#hq-prompt").innerHTML = `Where is home? <span class="muted">Play the hook (<kbd>space</kbd>, as often as you like), then find its tonic on the keyboard. Keys sound when clicked; the highlighted key is your answer.</span>`;
+    HQ.sel = null; h = { ...h, whole: true };
+    $("#hq-prompt").innerHTML = `Where is home? <span class="muted">The whole section plays (<kbd>space</kbd> replays it, as often as you like); find its tonic on the keyboard. Keys sound when clicked; the highlighted key is your answer.</span>`;
     const base0 = 12 * Math.floor(Math.min(...h.notes.map(n => n.midi)) / 12) - 12;   // default: the octave below the hook's lowest note
     const renderKeys = () => {
       const base = base0 + 12 * S.keyOctave, oct = Math.floor(base / 12) - 1;
@@ -631,7 +610,7 @@ function nextHook() {
     $("#hq-prompt").innerHTML = `Which song is this hook from? <span class="muted">${h.n} notes${deg ? ", degrees against the tonic" : ""}. Hear it in your head.</span>`;
     renderSeq();
     $("#hq-play").disabled = true; $("#hq-play").title = "plays after you answer";
-    const others = [...new Set(hookPool().map(x => x.song))].filter(s => s !== h.song).sort(() => Math.random() - 0.5);
+    const others = [...new Set(hookPool("song").map(x => x.song))].filter(s => s !== h.song).sort(() => Math.random() - 0.5);
     const n = S.hookChoices === "all" ? others.length : +S.hookChoices - 1;
     const choices = [h.song, ...others.slice(0, n)].sort((x, y) => x.localeCompare(y));
     for (const sName of choices) a.append(el("button", { class: "btn", "data-ans": sName, onclick: () => answerHook(sName) }, sName));
@@ -640,7 +619,7 @@ function nextHook() {
     if (deg) {
       HQ.target = 0; HQ.guesses = []; HQ.mode = "degrees";
       renderDegPrompt(); renderSeq(true);
-      const opts = DEG_ORDER.filter(d => d.length === 1 || hookPool().some(x => x.notes.some(n => n.sd === d)));
+      const opts = DEG_ORDER.filter(d => d.length === 1 || hookPool("interval").some(x => x.notes.some(n => n.sd === d)));
       const renderDegs = () => {   // buttons sound their degree over the tonic (and keep sounding after the hook is answered); 8va shifts the octave
         const T = degTonic(h);
         const keep = {}; document.querySelectorAll("#hq-answers button[data-ans]").forEach(b => keep[b.dataset.ans] = b.classList.contains("wrong"));
@@ -657,12 +636,16 @@ function nextHook() {
   }
   showClip(HQ.target !== undefined ? { ...h, targetAbs: h.noteIndex + HQ.target } : h, false); updateCover();
   if (currentVideo !== h.youtubeId && playerReady) { currentVideo = h.youtubeId; player.cueVideoById(h.youtubeId, clipWindow(h).start); }
-  if (S.drone && tools) droneStart(h);
-  if (mode === "tonic") setTimeout(() => { if (HQ && HQ.hook.id === h.id && !HQ.revealed) playClip(hookClip(), 1); }, 400);
+  const live = () => HQ && HQ.hook.id === h.id && !HQ.revealed;
+  if (mode === "tonic") setTimeout(() => { if (live()) playClip(hookClip(), 1); }, 400);
+  else if (tools) {   // the section establishes the key; the quiz is the hook that follows, with the drone under it
+    const quiz = () => { if (!live()) return; if (S.drone) droneStart(h); setTimeout(() => { if (live()) playClip(hookClip(), 1); }, 500); };
+    setTimeout(() => { if (live() && !playClip({ ...hookClip(), whole: true }, 1, quiz)) quiz(); }, 400);
+  }
 }
 function renderDegPrompt() {
   const h = HQ.hook, lyrH = hookLyricHtml(h, HQ.target);
-  $("#hq-prompt").innerHTML = `<strong>${h.song}</strong> <span class="muted">· ${h.section} · ${h.key.split(" ")[1]} key</span>${lyrH ? `<span class="lyric">“${lyrH}”</span>` : ""}<br><span class="muted">Name each note in turn; a miss keeps you on the note. Now note <strong>${HQ.target + 1}</strong> of ${h.n}: the ? below, highlighted in the strip${lyrH.includes("hit") ? ", bold in the lyric" : ""}. The drone is the tonic; <kbd>c</kbd> plays a progression in the key; <kbd>t</kbd> plays the current note; the degree buttons (keys 1–7) sound their note and answer. Playing the clip counts as a hint.</span>`;
+  $("#hq-prompt").innerHTML = `<strong>${h.song}</strong> <span class="muted">· ${h.section} · ${h.key.split(" ")[1]} key</span>${lyrH ? `<span class="lyric">“${lyrH}”</span>` : ""}<br><span class="muted">The whole section plays first to set the key, then the hook. Name each note in turn; a miss keeps you on the note. Now note <strong>${HQ.target + 1}</strong> of ${h.n}: the ? below, highlighted in the strip${lyrH.includes("hit") ? ", bold in the lyric" : ""}. The drone is the tonic; <kbd>s</kbd> replays the section; <kbd>c</kbd> plays a progression in the key; <kbd>t</kbd> plays the current note; the degree buttons (keys 1–7) sound their note and answer. Replaying the hook counts as a hint.</span>`;
 }
 function answerHook(ans) {
   if (HQ.answered) return;
@@ -729,12 +712,14 @@ function finishHooks() {
   const misses = R.filter(r => !r.correct).map(r => r.mode === "tonic" ? `${title(r)}: ${PC_NAMES[+r.guess]}→${PC_NAMES[+r.truth]}${r.near ? " (relative)" : ""}` : r.mode === "song" ? `${title(r)}→${(r.guess || "?").split(" – ")[1] || r.guess}` : r.mode === "degrees" ? `${title(r)}: ${r.guesses.map(g => g.correct ? degText(g.truth) : `${g.wrong.map(degText).join(",")}→${degText(g.truth)}`).join(" ")}` : `${r.hook.firstInterval}→${r.guess} (${title(r)})`);
   $("#hooks-results-text").textContent = `hooks result — ${new Date().toISOString().slice(0, 10)}: ` +
     [tq.length ? `tonic ${tq.filter(r => r.correct).length}/${tq.length}${tNear ? ` (+${tNear} relative)` : ""}` : "", song.length ? `song ${song.filter(r => r.correct).length}/${song.length}` : "", dq.length ? `degrees ${notesOk}/${notes} notes, ${hooksOk}/${dq.length} hooks (${DEG_ORDER.map(degText).filter(i => per[i]).map(i => `${i} ${per[i].ok}/${per[i].n}`).join(", ")})` : "", ivq.length ? `interval ${ivq.filter(r => r.correct).length}/${ivq.length} (${INTERVAL_ORDER.filter(i => per[i]).map(i => `${i} ${per[i].ok}/${per[i].n}`).join(", ")})` : ""].filter(Boolean).join(", ") +
-    (misses.length ? `\nmisses: ${misses.join("; ")}` : "") + `\nasked ${R.length} · pool ${hookPool().length} hooks, sections=${S.hookSections.join("+")}, labels=${S.labels}, drone=${S.drone ? "on" : "off"}, choices=${S.hookChoices}`;
+    (misses.length ? `\nmisses: ${misses.join("; ")}` : "") + `\nasked ${R.length} · pool ${hookPool().length} hooks, mode=${S.hookMode}, labels=${S.labels}, drone=${S.drone ? "on" : "off"}, choices=${S.hookChoices}`;
   SESSION = null; HQ = null; refreshHooks();
 }
 $("#hooks-start").onclick = startHooks; $("#hooks-again").onclick = startHooks;
 $("#hooks-end-early").onclick = () => { droneStop(); stopClip(); if (SESSION && SESSION.results.length) finishHooks(); else { SESSION = null; HQ = null; $("#hooks-live").classList.add("hidden"); $("#hooks-idle").classList.remove("hidden"); updateCover(); refreshHooks(); } };
-function hookClip() { const h = HQ.hook; return HQ.mode === "tonic" ? { ...h, long: true, targetAbs: h.targetAbs } : HQ.target !== undefined ? { ...h, targetAbs: h.noteIndex + HQ.target } : h; }
+function hookClip() { const h = HQ.hook; return HQ.mode === "tonic" ? { ...h, whole: true, targetAbs: h.targetAbs } : HQ.target !== undefined ? { ...h, targetAbs: h.noteIndex + HQ.target } : h; }
+function playSection() { if (!HQ || $("#hq-section").classList.contains("hidden")) return; playClip({ ...hookClip(), whole: true }, 1); }   // the key reference, like the drone: not a hint
+$("#hq-section").onclick = playSection;
 $("#hq-play").onclick = () => { if (!HQ || $("#hq-play").disabled) return; if (!HQ.revealed) { HQ.plays++; if (HQ.mode !== "tonic") $("#hq-play-status").textContent = "hint used"; } playClip(hookClip(), 1); };
 const hasDrone = () => HQ && !$("#hq-drone").classList.contains("hidden");   // the degrees exercise's tools: note, progression, drone
 function startingTone() { if (!hasDrone()) return; stopClip(); synthNote(HQ.hook.notes[HQ.target ?? 0].midi, 0.05, 1.2, 0.3); }
@@ -750,6 +735,7 @@ document.addEventListener("keydown", (e) => {
   if (e.code === "Space") { e.preventDefault(); $("#hq-play").click(); }
   if (e.key === "t" || e.key === "T") { e.preventDefault(); startingTone(); }
   if (e.key === "c" || e.key === "C") { e.preventDefault(); $("#hq-prog").click(); }
+  if (e.key === "s" || e.key === "S") { e.preventDefault(); playSection(); }
   if (HQ.mode === "degrees" && /^[1-7]$/.test(e.key)) { e.preventDefault(); const b = document.querySelector(`#hq-answers button[data-ans="${e.key}"]`); if (b) b.click(); }
   if (e.key === "d" || e.key === "D") { e.preventDefault(); $("#hq-drone").click(); }
   if (e.key === "Enter" && HQ.revealed) { e.preventDefault(); $("#hq-next").click(); }
