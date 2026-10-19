@@ -73,8 +73,6 @@
   .timeline .note { position:absolute; height:10px; background:#3a4257; border-radius:3px; transition:top .35s ease, height .35s ease; }
   .timeline .note.target { background:var(--acc); box-shadow:0 0 0 1px #0b1020 inset; }
   .timeline .note.target.a { background:var(--warn); }
-  .timeline .playhead { position:absolute; top:0; bottom:0; width:2px; background:#fff; opacity:.8; left:0; }
-  .timeline .playhead.hidden { display:none; }
   .timeline .note.sounding { filter:brightness(1.6); transform:scaleY(1.9); box-shadow:0 0 10px rgba(255,255,255,.35); transition:none; }
   .timeline .note.sounding.target { filter:brightness(1.35); }
   .timeline .win { position:absolute; top:0; bottom:0; background:rgba(110,168,254,.06); border-left:1px dashed #3a4257; border-right:1px dashed #3a4257; }
@@ -161,7 +159,7 @@
           <div class="ivseq" id="hq-ivs"></div>
           <div class="row">
             <button class="btn" id="hq-play">▶ Play hook</button>
-            <button class="btn" id="hq-section" title="Replays the whole section the hook is in, to re-establish the key (not a hint)">▶ Section <kbd>s</kbd></button>
+            <button class="btn" id="hq-section" title="Replays the lead-in: the song's section before the hook, or the hook's own section (not a hint)">▶ Section <kbd>s</kbd></button>
             <button class="btn" id="hq-tone" title="Plays the note you're naming (the ?) on a synth: its pitch, not its degree">♪ This note <kbd>t</kbd></button>
             <button class="btn" id="hq-prog" title="A chord progression in the hook's key, ending on home, to set the tonal centre">♫ <span id="hq-prog-name">I–V–vi–IV–I</span> <kbd>c</kbd></button>
             <button class="tiny" id="hq-drone" title="Tonic drone on/off"><kbd>d</kbd> drone</button>
@@ -206,10 +204,6 @@
         <select id="hook-choices"><option>4</option><option>6</option><option>8</option><option value="all">all songs</option></select>
       </div>
       <div class="row">
-        <label class="small">Visualizer</label>
-        <select id="viz"><option value="pop">pop on each note</option><option value="slider">smooth slider</option><option value="both">both</option></select>
-      </div>
-      <div class="row">
         <label class="small">Synth volume (keys, note, chords, drone) <span id="synth-vol-val"></span></label>
         <input type="range" id="synth-vol" min="0" max="1.5" step="0.05">
       </div>
@@ -234,7 +228,7 @@ let DATA = null, SONGS = [];
 const SONGS_OFF_BY_DEFAULT = ["Kenshi Yonezu – KICK BACK", "Kenshi Yonezu – Lemon", "YOASOBI – Idol"];   // anime-list songs, unticked unless you tick them
 const S = loadSettings();
 function loadSettings() {
-  const d = { padBefore: 0.15, padAfter: 0.25, viz: "pop", showLyrics: true, skipSuspect: true, songs: null, songsSeen: [], hookMode: "song", hookChoices: "4", labels: "degrees", drone: true, strip: true, synthVol: 1, keyOctave: 0, degOctave: 0, settingsOpen: false };
+  const d = { padBefore: 0.15, padAfter: 0.25, showLyrics: true, skipSuspect: true, songs: null, songsSeen: [], hookMode: "song", hookChoices: "4", labels: "degrees", drone: true, strip: true, synthVol: 1, keyOctave: 0, degOctave: 0, settingsOpen: false };
   try { return Object.assign(d, JSON.parse(localStorage.getItem("it-settings") || "{}")); } catch { return d; }
 }
 function saveSettings() { try { localStorage.setItem("it-settings", JSON.stringify(S)); } catch {} }
@@ -268,7 +262,6 @@ function buildSettings() {
   $("#labels").value = S.labels; $("#labels").onchange = e => { S.labels = e.target.value; saveSettings(); refreshHooks(); if (HQ) renderSeq(); };
   $("#drone").checked = S.drone; $("#drone-wrap").classList.toggle("on", S.drone);
   $("#drone").onchange = e => { S.drone = e.target.checked; $("#drone-wrap").classList.toggle("on", S.drone); saveSettings(); if (HQ && !HQ.revealed && hasDrone()) (S.drone ? droneStart(HQ.hook) : droneStop()); };
-  $("#viz").value = S.viz; $("#viz").onchange = e => { S.viz = e.target.value; saveSettings(); renderTimeline(); };
   $("#synth-vol").value = S.synthVol; $("#synth-vol-val").textContent = Math.round(S.synthVol * 100) + "%";
   $("#synth-vol").oninput = e => { S.synthVol = +e.target.value; $("#synth-vol-val").textContent = Math.round(S.synthVol * 100) + "%"; saveSettings(); if (DRONE) DRONE.out.gain.setTargetAtTime(0.11 * Math.max(0.001, S.synthVol), actx.currentTime, 0.05); };
   $("#strip").checked = S.strip; $("#strip-wrap").classList.toggle("on", S.strip); $("#timeline").classList.toggle("hidden", !S.strip);
@@ -298,32 +291,33 @@ window.onYouTubeIframeAPIReady = () => {
     },
   });
 };
-function playClip(c, rate = 1, onDone = null) {   // onDone runs once when the clip reaches its end (not when it is stopped)
+function playClip(c, rate = 1, onDone = null, cue = null) {   // onDone runs once when the clip reaches its end (not when it is stopped); cue = { at, run } fires once at a time inside it
   if (!playerReady) { $("#video-status").textContent = "player not ready yet"; return false; }
   stopClip();
   const { start, end } = clipWindow(c);
-  showClip(SHOWN && SHOWN.clip.id === c.id ? { ...SHOWN.clip, whole: c.whole } : c, !(HQ && !HQ.revealed));
+  showClip(SHOWN && SHOWN.clip.id === c.id ? { ...SHOWN.clip, whole: c.whole, lead: c.lead } : c, !(HQ && !HQ.revealed));   // keep the target, follow the window
   const go = () => {
     player.setPlaybackRate(rate);
     player.seekTo(start, true); player.playVideo();
-    clipEnd = end; clipStart = start; clipDone = onDone;
-    $("#video-status").textContent = `${c.song} · ${c.section} · ${fmtTime(start)} → ${(end - start).toFixed(2)}s @${rate}x · target at ${(c.onsetA - start).toFixed(1)}s`;
+    clipEnd = end; clipStart = start; clipDone = onDone; clipCue = cue;
+    $("#video-status").textContent = `${c.song} · ${c.section} · ${fmtTime(start)} → ${(end - start).toFixed(2)}s @${rate}x ${c.hookLen ? ` · hook at ${(c.onsetA - start).toFixed(1)}s` : ""}`;
   };
   if (currentVideo !== c.youtubeId) { currentVideo = c.youtubeId; pendingPlay = go; player.cueVideoById(c.youtubeId, start); }
   else go();
   return true;
 }
-let clipEnd = 0, clipStart = 0, clipDone = null;
+let clipEnd = 0, clipStart = 0, clipDone = null, clipCue = null;
 function watchStop() {
   clearInterval(stopTimer);
   stopTimer = setInterval(() => {
     if (!player || !clipEnd) return;
     const t = player.getCurrentTime();
     movePlayhead(t);
+    if (clipCue && t >= clipCue.at) { const q = clipCue; clipCue = null; q.run(); }
     if (t >= clipEnd) { player.pauseVideo(); clearInterval(stopTimer); clipEnd = 0; document.querySelectorAll("#timeline .note.sounding").forEach(b => b.classList.remove("sounding")); const f = clipDone; clipDone = null; if (f) f(); }
   }, 16);
 }
-function stopClip() { clearInterval(stopTimer); clipEnd = 0; clipDone = null; pendingPlay = null; if (playerReady && player.getPlayerState && player.getPlayerState() === 1) player.pauseVideo(); }
+function stopClip() { clearInterval(stopTimer); clipEnd = 0; clipDone = null; clipCue = null; pendingPlay = null; if (playerReady && player.getPlayerState && player.getPlayerState() === 1) player.pauseVideo(); }
 
 // ---------- context window, timeline, lyrics ----------
 let SHOWN = null; // {clip, win, revealed}
@@ -332,19 +326,36 @@ function chordChanges(s) {   // onsets of the section's chord *changes*: a repea
   ch.forEach((x, i) => { if (!i || x.root !== ch[i - 1].root || x.type !== ch[i - 1].type) onsets.push(x.on); });
   return { onsets, lastOff: ch.length ? ch[ch.length - 1].off : null };
 }
+function sectionBounds(s) {   // first and last sounding moment of a Theorytab section, from its chords and notes
+  const { onsets, lastOff } = chordChanges(s), notes = s.notes || [];
+  return { first: Math.min(...[onsets[0], notes[0]?.on].filter(x => x !== undefined)), last: Math.max(...[lastOff, notes[notes.length - 1]?.off].filter(x => x !== null && x !== undefined)) };
+}
 function clipWindow(c) {
-  // Two windows (2026-10-19, Mitchell): c.whole = the entire Theorytab section (find-the-tonic's question; name-the-degrees plays
-  // it first to establish the key); otherwise the hook: half a beat before its first note, and on to the end of the chord its last
-  // note falls in (the 8-note cap often chops a phrase mid-chord, which sounded "a little bit short"), never less than half a beat after.
-  const s = DATA.sections[c.sectionKey], spb = s.secPerBeat || 0.5, { onsets, lastOff } = chordChanges(s), notes = s.notes || [];
-  if (c.whole) {
-    const first = Math.min(...[onsets[0], notes[0]?.on].filter(x => x !== undefined)), last = Math.max(...[lastOff, notes[notes.length - 1]?.off].filter(x => x !== null && x !== undefined));
-    return { start: Math.max(0, first - S.padBefore), end: last + S.padAfter };
-  }
+  // Windows (2026-10-19, Mitchell): c.whole = the entire Theorytab section (find-the-tonic's question; name-the-degrees' lead-in);
+  // c.lead = the preceding section (key) running straight into the hook (name-the-degrees when the song has that section);
+  // otherwise the hook: half a beat before its first note, and on to the end of the chord its last note falls in (the 8-note cap
+  // often chops a phrase mid-chord, which sounded "a little bit short"), never less than half a beat after.
+  const s = DATA.sections[c.sectionKey], spb = s.secPerBeat || 0.5, { onsets, lastOff } = chordChanges(s);
+  if (c.whole) { const { first, last } = sectionBounds(s); return { start: Math.max(0, first - S.padBefore), end: last + S.padAfter }; }
   const start = Math.max(0, c.onsetA - 0.5 * spb - S.padBefore), hookEnd = c.end + 0.5 * spb + S.padAfter;
   const chordEnd = onsets.find(x => x > c.end - 0.05);   // the change that ends the chord the hook ends in
-  return { start, end: Math.max(hookEnd, Math.min((chordEnd !== undefined ? chordEnd : (lastOff ?? 0) + 0.3) - 0.05, start + 30)) };
+  const end = Math.max(hookEnd, Math.min((chordEnd !== undefined ? chordEnd : (lastOff ?? 0) + 0.3) - 0.05, start + 30));
+  if (c.lead) return { start: Math.max(0, sectionBounds(DATA.sections[c.lead]).first - S.padBefore), end };
+  return { start, end };
 }
+// The lead-in for name-the-degrees: the song's section before the hook's, when the corpus has it, in the same key, timed well
+// enough, and ending just before the hook. Null when the hook's section is the first we have (then its own section is the lead-in).
+function leadSection(h) {
+  const s = DATA.sections[h.sectionKey];
+  let best = null, bestEnd = -1;
+  for (const [k, x] of Object.entries(DATA.sections)) {
+    if (k === h.sectionKey || x.youtubeId !== s.youtubeId || x.unavailable || x.key !== h.key || (S.skipSuspect && x.timing === "suspect")) continue;
+    const { last } = sectionBounds(x);   // -Infinity for a section with no notes and no chords (two in the corpus)
+    if (isFinite(last) && last <= h.onsetA + 0.5 && last > h.onsetA - 10 && last > bestEnd) { best = k; bestEnd = last; }   // within 10 s: a section that ended a minute earlier is not "the section before"
+  }
+  return best;
+}
+const leadAdjacent = (h, k) => clipWindow(h).start - sectionBounds(DATA.sections[k]).last < 1.5;   // the lead-in runs straight into the hook: play them as one clip
 function showClip(c, revealed = true) {
   const win = clipWindow(c);
   SHOWN = { clip: c, win, revealed };
@@ -354,12 +365,13 @@ function renderTimeline() {
   const tl = $("#timeline"); tl.innerHTML = "";
   if (!SHOWN) return;
   const { clip: c, win, revealed } = SHOWN, s = DATA.sections[c.sectionKey], len = win.end - win.start;
-  const notes = (s.notes || []).map((n, i) => ({ ...n, i })).filter(n => n.off > win.start && n.on < win.end);
+  const leadNotes = c.lead ? (DATA.sections[c.lead].notes || []).map(n => ({ ...n, i: -1 })) : [];   // the preceding section's notes, never targets
+  const notes = [...leadNotes, ...(s.notes || []).map((n, i) => ({ ...n, i }))].filter(n => n.off > win.start && n.on < win.end);
   const lo = Math.min(...notes.map(n => n.midi)), hi = Math.max(...notes.map(n => n.midi)), PX = 3, mid = (lo + hi) / 2;
   const height = revealed ? Math.max(64, (hi - lo) * PX + 30) : 64; tl.style.height = `${height}px`;
-  tl.append(el("div", { class: "win", style: `left:${100 * (c.onsetA - win.start) / len}%; width:${100 * (c.end - c.onsetA) / len}%` }));
+  if (c.hookLen) tl.append(el("div", { class: "win", style: `left:${100 * (c.onsetA - win.start) / len}%; width:${100 * (c.end - c.onsetA) / len}%` }));
   for (const n of notes) {
-    const isA = n.i === (c.targetAbs ?? c.noteIndex), isB = n.i >= c.noteIndex && n.i < c.noteIndex + (c.hookLen || 2) && !isA;
+    const isA = n.i === (c.targetAbs ?? c.noteIndex), isB = n.i >= c.noteIndex && n.i < c.noteIndex + (c.hookLen ?? 2) && !isA;
     const top = revealed ? height / 2 - 5 - (n.midi - mid) * PX : 27;   // true scale: every semitone is PX px, in every clip
     const blk = el("div", { class: "note" + (isA || isB ? " target" : "") + (isA ? " a" : ""), title: revealed ? n.name : "", style: `left:${100 * (Math.max(n.on, win.start) - win.start) / len}%; width:${Math.max(0.6, 100 * (Math.min(n.off, win.end) - Math.max(n.on, win.start)) / len)}%; top:${top}px` });
     blk.dataset.on = n.on; blk.dataset.off = n.off;
@@ -367,12 +379,10 @@ function renderTimeline() {
   }
   tl.append(el("div", { class: "label", style: "left:4px" }, fmtTime(win.start)));
   tl.append(el("div", { class: "label", style: "right:4px" }, `${len.toFixed(1)}s · ${revealed ? `pitch, ${hi - lo} st span` : "rhythm only"} · ${notes.length} notes`));
-  tl.append(el("div", { class: "playhead" + (S.viz === "pop" ? " hidden" : ""), id: "playhead", style: "left:0" }));
 }
-function movePlayhead(t) {
-  const ph = $("#playhead"); if (!ph || !SHOWN) return;
-  const { win } = SHOWN; ph.style.left = `${Math.min(100, Math.max(0, 100 * (t - win.start) / (win.end - win.start)))}%`;
-  if (S.viz !== "slider") for (const b of document.querySelectorAll("#timeline .note")) b.classList.toggle("sounding", t >= +b.dataset.on - 0.03 && t < +b.dataset.off - 0.03);
+function movePlayhead(t) {   // each note pops while it sounds (the smooth-slider visualizer was dropped 2026-10-19)
+  if (!SHOWN) return;
+  for (const b of document.querySelectorAll("#timeline .note")) b.classList.toggle("sounding", t >= +b.dataset.on - 0.03 && t < +b.dataset.off - 0.03);
   if (SHOWN.lyricLines) for (const { line, elm } of SHOWN.lyricLines) elm.classList.toggle("now", t >= line.t && t <= line.t + Math.max(line.d, 0.5));
 }
 const LYR = {};
@@ -638,14 +648,19 @@ function nextHook() {
   if (currentVideo !== h.youtubeId && playerReady) { currentVideo = h.youtubeId; player.cueVideoById(h.youtubeId, clipWindow(h).start); }
   const live = () => HQ && HQ.hook.id === h.id && !HQ.revealed;
   if (mode === "tonic") setTimeout(() => { if (live()) playClip(hookClip(), 1); }, 400);
-  else if (tools) {   // the section establishes the key; the quiz is the hook that follows, with the drone under it
+  else if (tools) {   // the lead-in establishes the key, then the hook is the quiz, with the drone from the hook on
     const quiz = () => { if (!live()) return; if (S.drone) droneStart(h); setTimeout(() => { if (live()) playClip(hookClip(), 1); }, 500); };
-    setTimeout(() => { if (live() && !playClip({ ...hookClip(), whole: true }, 1, quiz)) quiz(); }, 400);
+    const lead = leadSection(h);
+    setTimeout(() => {
+      if (!live()) return;
+      if (lead && leadAdjacent(h, lead)) playClip({ ...hookClip(), lead }, 1, null, { at: h.onsetA - 0.1, run: () => { if (live() && S.drone) droneStart(h); } });   // preceding section straight into the hook, one clip
+      else if (!playClip(leadClip(), 1, quiz)) quiz();   // a non-adjacent preceding section, or the hook's own section when it is the first we have: lead-in, then the hook
+    }, 400);
   }
 }
 function renderDegPrompt() {
   const h = HQ.hook, lyrH = hookLyricHtml(h, HQ.target);
-  $("#hq-prompt").innerHTML = `<strong>${h.song}</strong> <span class="muted">· ${h.section} · ${h.key.split(" ")[1]} key</span>${lyrH ? `<span class="lyric">“${lyrH}”</span>` : ""}<br><span class="muted">The whole section plays first to set the key, then the hook. Name each note in turn; a miss keeps you on the note. Now note <strong>${HQ.target + 1}</strong> of ${h.n}: the ? below, highlighted in the strip${lyrH.includes("hit") ? ", bold in the lyric" : ""}. The drone is the tonic; <kbd>s</kbd> replays the section; <kbd>c</kbd> plays a progression in the key; <kbd>t</kbd> plays the current note; the degree buttons (keys 1–7) sound their note and answer. Replaying the hook counts as a hint.</span>`;
+  $("#hq-prompt").innerHTML = `<strong>${h.song}</strong> <span class="muted">· ${h.section} · ${h.key.split(" ")[1]} key</span>${lyrH ? `<span class="lyric">“${lyrH}”</span>` : ""}<br><span class="muted">${(k => k ? `The song's ${DATA.sections[k].section} plays first to set the key, then the hook` : "Its whole section plays first to set the key, then the hook")(leadSection(h))}. Name each note in turn; a miss keeps you on the note. Now note <strong>${HQ.target + 1}</strong> of ${h.n}: the ? below, highlighted in the strip${lyrH.includes("hit") ? ", bold in the lyric" : ""}. The drone is the tonic; <kbd>s</kbd> replays the section; <kbd>c</kbd> plays a progression in the key; <kbd>t</kbd> plays the current note; the degree buttons (keys 1–7) sound their note and answer. Replaying the hook counts as a hint.</span>`;
 }
 function answerHook(ans) {
   if (HQ.answered) return;
@@ -718,7 +733,11 @@ function finishHooks() {
 $("#hooks-start").onclick = startHooks; $("#hooks-again").onclick = startHooks;
 $("#hooks-end-early").onclick = () => { droneStop(); stopClip(); if (SESSION && SESSION.results.length) finishHooks(); else { SESSION = null; HQ = null; $("#hooks-live").classList.add("hidden"); $("#hooks-idle").classList.remove("hidden"); updateCover(); refreshHooks(); } };
 function hookClip() { const h = HQ.hook; return HQ.mode === "tonic" ? { ...h, whole: true, targetAbs: h.targetAbs } : HQ.target !== undefined ? { ...h, targetAbs: h.noteIndex + HQ.target } : h; }
-function playSection() { if (!HQ || $("#hq-section").classList.contains("hidden")) return; playClip({ ...hookClip(), whole: true }, 1); }   // the key reference, like the drone: not a hint
+function leadClip() {   // what "▶ Section" replays: the preceding section whole, else the hook's own section whole
+  const h = HQ.hook, k = leadSection(h);
+  return k ? { ...h, sectionKey: k, section: DATA.sections[k].section, id: `${h.id}@${k}`, whole: true, noteIndex: -1, hookLen: 0, targetAbs: -1 } : { ...hookClip(), whole: true };
+}
+function playSection() { if (!HQ || $("#hq-section").classList.contains("hidden")) return; playClip(leadClip(), 1); }   // the key reference, like the drone: not a hint
 $("#hq-section").onclick = playSection;
 $("#hq-play").onclick = () => { if (!HQ || $("#hq-play").disabled) return; if (!HQ.revealed) { HQ.plays++; if (HQ.mode !== "tonic") $("#hq-play-status").textContent = "hint used"; } playClip(hookClip(), 1); };
 const hasDrone = () => HQ && !$("#hq-drone").classList.contains("hidden");   // the degrees exercise's tools: note, progression, drone
