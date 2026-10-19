@@ -219,6 +219,10 @@
         <input type="number" id="tonic-chords" min="1" max="12" step="1" style="width:60px">
       </div>
       <div class="row">
+        <label class="small">Hook clip runs on after the hook</label>
+        <select id="clip-tail"><option value="0">not at all (half a beat)</option><option value="1">one more chord</option><option value="2">two more chords</option><option value="section">to the end of the section</option></select>
+      </div>
+      <div class="row">
         <label class="small">Labels</label>
         <select id="labels"><option value="degrees">scale degrees (1 ↓7 ↑2)</option><option value="intervals">intervals (M2↓ m3↑)</option></select>
       </div>
@@ -239,7 +243,7 @@ let DATA = null, SONGS = [];
 const SONGS_OFF_BY_DEFAULT = ["Kenshi Yonezu – KICK BACK", "Kenshi Yonezu – Lemon", "YOASOBI – Idol"];   // anime-list songs, unticked unless you tick them
 const S = loadSettings();
 function loadSettings() {
-  const d = { padBefore: 0.15, padAfter: 0.25, viz: "pop", showLyrics: true, skipSuspect: true, songs: null, songsSeen: [], hookMode: "song", hookChoices: "4", hookSections: ["Chorus"], labels: "degrees", drone: true, strip: true, tonicChords: 4, synthVol: 1, keyOctave: 0, degOctave: 0, settingsOpen: false };
+  const d = { padBefore: 0.15, padAfter: 0.25, viz: "pop", showLyrics: true, skipSuspect: true, songs: null, songsSeen: [], hookMode: "song", hookChoices: "4", hookSections: ["Chorus"], labels: "degrees", drone: true, strip: true, tonicChords: 4, clipTail: "2", synthVol: 1, keyOctave: 0, degOctave: 0, settingsOpen: false };
   try { return Object.assign(d, JSON.parse(localStorage.getItem("it-settings") || "{}")); } catch { return d; }
 }
 function saveSettings() { try { localStorage.setItem("it-settings", JSON.stringify(S)); } catch {} }
@@ -277,6 +281,7 @@ function buildSettings() {
   $("#synth-vol").value = S.synthVol; $("#synth-vol-val").textContent = Math.round(S.synthVol * 100) + "%";
   $("#synth-vol").oninput = e => { S.synthVol = +e.target.value; $("#synth-vol-val").textContent = Math.round(S.synthVol * 100) + "%"; saveSettings(); if (DRONE) DRONE.out.gain.setTargetAtTime(0.11 * Math.max(0.001, S.synthVol), actx.currentTime, 0.05); };
   $("#tonic-chords").value = S.tonicChords; $("#tonic-chords").onchange = e => { S.tonicChords = Math.max(1, +e.target.value || 4); saveSettings(); };
+  $("#clip-tail").value = S.clipTail; $("#clip-tail").onchange = e => { S.clipTail = e.target.value; saveSettings(); if (HQ) showClip(hookClip(), HQ.revealed); };
   $("#strip").checked = S.strip; $("#strip-wrap").classList.toggle("on", S.strip); $("#timeline").classList.toggle("hidden", !S.strip);
   $("#strip").onchange = e => { S.strip = e.target.checked; $("#strip-wrap").classList.toggle("on", S.strip); $("#timeline").classList.toggle("hidden", !S.strip); saveSettings(); };
   $("#show-lyrics").checked = S.showLyrics; $("#show-lyrics-wrap").classList.toggle("on", S.showLyrics);
@@ -332,21 +337,32 @@ function stopClip() { clearInterval(stopTimer); clipEnd = 0; pendingPlay = null;
 
 // ---------- context window, timeline, lyrics ----------
 let SHOWN = null; // {clip, win, revealed}
+function chordChanges(s) {   // onsets of the section's chord *changes*: a repeated chord isn't a change
+  const ch = s.chords || [], onsets = [];
+  ch.forEach((x, i) => { if (!i || x.root !== ch[i - 1].root || x.type !== ch[i - 1].type) onsets.push(x.on); });
+  return { onsets, lastOff: ch.length ? ch[ch.length - 1].off : null };
+}
 function clipWindow(c) {
-  const s = DATA.sections[c.sectionKey], spb = s.secPerBeat || 0.5;
+  const s = DATA.sections[c.sectionKey], spb = s.secPerBeat || 0.5, { onsets, lastOff } = chordChanges(s);
   if (c.long) {   // find-the-tonic: start on the chord the hook begins in, run through S.tonicChords chord changes
-    const ch = s.chords || [], onsets = [];
-    for (const x of ch) if (!onsets.length || x.root !== ch[ch.indexOf(x) - 1].root || x.type !== ch[ch.indexOf(x) - 1].type) onsets.push(x.on);   // a repeated chord isn't a change
     const inChord = onsets.filter(x => x <= c.onsetA + 0.05).pop();
     const start = Math.max(0, Math.max(inChord ?? -1, c.onsetA - 2 * spb) - S.padBefore);
     const after = onsets.filter(x => x > c.onsetA + 0.05);
     const nth = after[S.tonicChords - 1];
-    const lastOff = ch.length ? ch[ch.length - 1].off : c.end;
-    const target = nth !== undefined ? Math.max(nth + 0.25, start + 8) : lastOff;   // through N changes, and at least 8 s (fast-changing songs)
-    const end = Math.max(c.end + 0.5 * spb, Math.min(target, lastOff + 0.3, start + 30)) + S.padAfter;
+    const last = lastOff ?? c.end;
+    const target = nth !== undefined ? Math.max(nth + 0.25, start + 8) : last;   // through N changes, and at least 8 s (fast-changing songs)
+    const end = Math.max(c.end + 0.5 * spb, Math.min(target, last + 0.3, start + 30)) + S.padAfter;
     return { start, end };
   }
-  return { start: Math.max(0, c.onsetA - 0.5 * spb - S.padBefore), end: c.end + 0.5 * spb + S.padAfter };
+  // Hook clips: half a beat before the first note; after the last note, run on per S.clipTail (2026-10-19, "always just a little
+  // bit short"): "0" stops half a beat after the hook, "1"/"2" finish the chord the hook ends in plus that many more whole chords
+  // (stopping just before the following change), "section" runs to the section's last chord. Never shorter than the hook itself.
+  const start = Math.max(0, c.onsetA - 0.5 * spb - S.padBefore), hookEnd = c.end + 0.5 * spb + S.padAfter;
+  if (S.clipTail === "0" || lastOff === null) return { start, end: hookEnd };
+  const after = onsets.filter(x => x > c.end - 0.05);   // ends of the chord the hook ends in, and of each chord after it
+  const n = S.clipTail === "section" ? Infinity : +S.clipTail;
+  const stop = after[n] !== undefined ? after[n] - 0.05 : lastOff + 0.3;
+  return { start, end: Math.max(hookEnd, Math.min(stop, start + 60)) };
 }
 function showClip(c, revealed = true) {
   const win = clipWindow(c);
