@@ -343,15 +343,15 @@ function clipWindow(c) {
   if (c.lead) return { start: Math.max(0, sectionBounds(DATA.sections[c.lead]).first - S.padBefore), end };
   return { start, end };
 }
-// The lead-in for name-the-degrees: the song's section before the hook's, when the corpus has it, in the same key, timed well
-// enough, and ending just before the hook. Null when the hook's section is the first we have (then its own section is the lead-in).
+// The lead-in for name-the-degrees: the latest section of the song before the hook's that the corpus has in the same key and
+// timed well enough. Null when the hook's section is the first we have (then its own section is the lead-in).
 function leadSection(h) {
   const s = DATA.sections[h.sectionKey];
   let best = null, bestEnd = -1;
   for (const [k, x] of Object.entries(DATA.sections)) {
     if (k === h.sectionKey || x.youtubeId !== s.youtubeId || x.unavailable || x.key !== h.key || (S.skipSuspect && x.timing === "suspect")) continue;
     const { last } = sectionBounds(x);   // -Infinity for a section with no notes and no chords (two in the corpus)
-    if (isFinite(last) && last <= h.onsetA + 0.5 && last > h.onsetA - 10 && last > bestEnd) { best = k; bestEnd = last; }   // within 10 s: a section that ended a minute earlier is not "the section before"
+    if (isFinite(last) && last <= h.onsetA + 0.5 && last > bestEnd) { best = k; bestEnd = last; }   // any earlier same-key section, however far back (Mitchell 2026-10-19): it plays, then a cut to the hook
   }
   return best;
 }
